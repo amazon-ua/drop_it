@@ -217,54 +217,70 @@ def node_A_section(g, mid=False):
     """Разрез поперёк рамы (по оси колонны, взгляд со стороны пролёта)."""
     Hr, Ht, Bc = g["Hr"], g["Ht"], g["Bc"]
     B = g["Bs"] if mid else Bc
-    s = Svg(-330, 470, 2780 if not mid else 2840, 3330)
+    s = Svg(-330, 520, 2780, 3330)
     zb_col = 2780 if not mid else 2930
     tp = 5
-    # колонна (вид с торца затяжки не виден — затяжка перед колонной)
-    s.rect(-B / 2, zb_col, B / 2, z_bot(0, Hr) - CAP["t"], COL["stub" if mid else "col"], "#0008", 0.9)
-    s.rect(-B / 2 - 0.1, z_bot(0, Hr) - CAP["t"], B / 2 + 0.1, z_bot(0, Hr), COL["plate"], "#000a", 1)
-    # стропило (сечение)
+    # Плоскость разреза — ось колонны (стойки), x = 0, взгляд со стороны пролёта.
+    # Рассечённые элементы: колонна/стойка и раскосы (вдоль — видны стенки, внутри пусто),
+    # стропило (поперёк — контур стенок), опорная пластина и фасонки (сплошные).
+    # Затяжка в разрез не попадает (кончается на грани колонны) — показана пунктиром.
     zb = z_bot(0, Hr)
+    zcap = zb - CAP["t"]
+    col_s = g["stub"] if mid else g["col"]
+    tc = col_s.t * 1000
+    ccol = COL["stub" if mid else "col"]
+    # колонна / стойка, рассечённая вдоль: две стенки
+    for u1, u2 in ((-B / 2, -B / 2 + tc), (B / 2 - tc, B / 2)):
+        s.rect(u1, zb_col, u2, zcap, ccol, "#000a", 1, 0.6)
+    s.line(-B / 2 + tc, zb_col, -B / 2 + tc, zcap, "ld")
+    s.line(B / 2 - tc, zb_col, B / 2 - tc, zcap, "ld")
+    if mid:
+        s.rect(-B / 2 - 1, zb_col - 3, B / 2 + 1, zb_col, COL["plate"], "#000a", 1)   # заглушка низа стойки
+    # опорная пластина (рассечена)
+    s.rect(-B / 2 - 0.1, zcap, B / 2 + 0.1, zb, COL["plate"], "#000a", 1)
+    # стропило — сечение (контур стенок)
     s.rect(-g["Br"] / 2, zb, g["Br"] / 2, zb + Hr / C12, COL["raf"], "#0008", 0.9)
     tw = g["raf"].t * 1000
     s.rect(-g["Br"] / 2 + tw, zb + tw, g["Br"] / 2 - tw, zb + Hr / C12 - tw, "var(--card)", "none")
-    # затяжка (сечение)
-    s.rect(-g["Bt"] / 2, 3000 - Ht / 2, g["Bt"] / 2, 3000 + Ht / 2, COL["tie"], "#0008", 0.9)
-    tt = g["tie"].t * 1000
-    s.rect(-g["Bt"] / 2 + tt, 3000 - Ht / 2 + tt, g["Bt"] / 2 - tt, 3000 + Ht / 2 - tt, "var(--card)", "none")
-    # фасонки
+    # затяжка — вне плоскости разреза (торцом примыкает к грани колонны): пунктир без заливки
+    s.rect(-g["Bt"] / 2, 3000 - Ht / 2, g["Bt"] / 2, 3000 + Ht / 2, "none", COL["tie"], 1, 1.6, dash="6 4")
+    # фасонки (рассечены)
     ztop = z_axis(0)
     for sgn in (-1, 1):
         u1 = sgn * B / 2
         u2 = sgn * (B / 2 + tp)
         s.rect(min(u1, u2), GUSSET["zb"], max(u1, u2), ztop, "#6b7280", "#111", 1, 0.8)
     if mid:
-        # раскосы боковой фермы подходят к наружным граням фасонок
+        # раскосы боковой фермы лежат в плоскости разреза — рассечены вдоль: верхняя и нижняя стенки
         a = g["alpha"]
         Hd = g["Hd"]
+        td = g["sd"].t * 1000 / math.cos(a)
+        h = Hd / 2 / math.cos(a)
+        L = 150
         for sgn in (-1, 1):
             u0 = sgn * (B / 2 + tp)
-            zc = 3000 - (abs(u0)) * math.tan(a)
-            # полоса раскоса, уходящая вниз-наружу
-            L = 150
+            zc = 3000 - abs(u0) * math.tan(a)
             du = sgn * L * math.cos(a)
             dz = -L * math.sin(a)
-            h = Hd / 2 / math.cos(a)
-            s.poly([(u0, zc + h), (u0 + du, zc + h + dz), (u0 + du, zc - h + dz), (u0, zc - h)],
-                   COL["sd"], "#0008", 0.9)
-        s.leader(-150, 2930, -320, 2870, f"раскос □{g['sd'].name}", "lbs")
+            for zo in (h, -h + td):   # верхняя стенка / нижняя стенка
+                s.poly([(u0, zc + zo), (u0 + du, zc + zo + dz), (u0 + du, zc + zo - td + dz), (u0, zc + zo - td)],
+                       COL["sd"], "#000a", 1, 0.6)
+            # линия обрыва
+            s.line(u0 + du, zc + h + dz, u0 + du, zc - h + dz, "ld")
+        s.leader(-150, 3000 - 150 * math.tan(a) - h + 5, -320, 2835, f"раскос □{g['sd'].name} (рассечён вдоль)", "lbs")
         s.weld(B / 2 + tp + 14, 3000 + 40, 4)
-    zb_ = z_bot(0, Hr)
-    s.leader(g["Br"] / 2, zb_ + Hr / C12 - 20, 130, 3290, f"стропило □{g['raf'].name}")
-    s.leader(B / 2, zb_ - 3, 130, 3200, "опорная пластина", "lbs")
-    s.leader(g["Bt"] / 2, 3000 + 10, 130, 3110, f"затяжка □{g['tie'].name} (сечение)", "lbs")
+    s.leader(g["Br"] / 2, zb + Hr / C12 - 20, 130, 3290, f"стропило □{g['raf'].name}")
+    s.leader(B / 2, zb - 3, 130, 3200, "опорная пластина", "lbs")
+    s.leader(g["Bt"] / 2, 3000 + 10, 130, 3110, f"затяжка — вне разреза (пунктир)", "lbs")
     s.leader(B / 2 + tp, GUSSET["zb"] + 10, 130, 2860 if mid else 2960, "фасонки t=5", "lbs")
-    if not mid:
-        s.leader(B / 2, 2850, 130, 2850, f"колонна □{g['col'].name}", "lbs")
+    if mid:
+        s.leader(-B / 2 + tc / 2, 2945, -320, 2800, f"стойка □{g['stub'].name} (рассечена вдоль)", "lbs")
+    else:
+        s.leader(B / 2, 2850, 130, 2850, f"колонна □{g['col'].name} (рассечена вдоль)", "lbs")
     s.dim_h(-B / 2 - tp, B / 2 + tp, GUSSET["zb"], f"{B + 2 * tp:.0f}", off=18)
-    s.dim_h(-B / 2, B / 2, zb_col, f"{B:.0f}", off=16)
+    s.dim_h(-B / 2, B / 2, zb_col, f"{B:.0f}", off=40 if mid else 16)
     s.line(0, 2790, 0, 3290)
-    s.text(-320, 3310, "разрез поперёк рамы (по оси колонны)", "lbs")
+    s.text(-320, 3310, "разрез по оси " + ("стойки" if mid else "колонны") + ", вид со стороны пролёта", "lbs")
     s.weld(B / 2 + tp + 10, GUSSET["zb"] + 30, 3)
     s.weld(-B / 2 - tp - 10, 3000, 3)
     return s.svg("узел — разрез поперёк рамы")
@@ -370,7 +386,9 @@ def build(final, nf):
 <h1>Узлы каркаса навеса</h1>
 <p class="sub">Три сварных узла: оголовок колонны (А), опора средней рамы на боковую ферму (Б), примыкание раскоса
 и нижнего пояса боковой фермы к колонне (В). Размеры — мм, отметки — м от верха щебня. Узлы показаны у левого ряда
-колонн; у правого ряда — зеркально. Номера <span class="wk">1</span> на чертежах — швы из таблиц.</p>
+колонн; у правого ряда — зеркально. Номера <span class="wk">1</span> на чертежах — швы из таблиц.
+На разрезах рассечённые трубы показаны стенками (внутри пусто), пластины — сплошными, элементы вне плоскости
+разреза — пунктиром.</p>
 <div class="card"><span class="pill">колонна □{col.name}</span><span class="pill">стропило □{raf.name}</span>
 <span class="pill">затяжка □{tie.name}</span><span class="pill">стойка-вставка □{stub.name}</span>
 <span class="pill">раскос боковой фермы □{sd.name}</span><span class="pill">нижний пояс □{sb.name}</span></div>
