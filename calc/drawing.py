@@ -23,7 +23,8 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
         p1, p2 = nodes[e.n1], nodes[e.n2]
         g = model.members[e.member]["group"]
         if view == "front":
-            if abs(p1[1]) > 1e-6 or abs(p2[1]) > 1e-6:
+            # рама 1 (логическая y = 0); в плоскости рамы откладываем расстояние от левой колонны
+            if abs(model.logical_y(p1)) > 1e-6 or abs(model.logical_y(p2)) > 1e-6:
                 continue
             if g == "lath":
                 continue
@@ -44,7 +45,7 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
     elif view == "side":
         xmin, xmax, ymin, ymax = M.Y_MIN - 0.3, M.Y_MAX + 0.3, -0.4, 4.0
     else:
-        xmin, xmax, ymin, ymax = -0.9, M.SPAN + 1.2, M.Y_MIN - 0.3, M.Y_MAX + 0.3
+        xmin, xmax, ymin, ymax = -0.9, M.SPAN + 1.2, M.Y_MIN - 0.3, M.Y_MAX + 0.6
     sx = (W - 2 * pad) / (xmax - xmin)
     sy = (H - 2 * pad) / (ymax - ymin)
     s = min(sx, sy)
@@ -72,13 +73,13 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
             out.append(f'<rect x="{px-w/2:.1f}" y="{py-h/2:.1f}" width="{max(w,2):.1f}" height="{max(h,2):.1f}" '
                        f'fill="{COLORS["lath"]}"/>')
     if view == "plan":
-        # контур кровли
-        a = T((-M.OVH_L, M.Y_MIN))
-        b = T((M.SPAN + M.OVH_R, M.Y_MAX))
-        out.append(f'<rect x="{a[0]:.1f}" y="{b[1]:.1f}" width="{b[0]-a[0]:.1f}" height="{a[1]-b[1]:.1f}" class="roof"/>')
+        # контур кровли — параллелограмм (косина площадки)
+        corners = [(-M.OVH_L, M.Y_MIN), (M.SPAN + M.OVH_R, M.Y_MIN), (M.SPAN + M.OVH_R, M.Y_MAX), (-M.OVH_L, M.Y_MAX)]
+        pts = " ".join(f"{T(model.phys((x, y, 0))[:2])[0]:.1f},{T(model.phys((x, y, 0))[:2])[1]:.1f}" for x, y in corners)
+        out.append(f'<polygon points="{pts}" class="roof"/>')
         for xc in (0.0, M.SPAN):
             for yc in (0.0, M.BAY):
-                c = T((xc, yc))
+                c = T(model.phys((xc, yc, 0))[:2])
                 w = sc.groups["col"].b * s
                 out.append(f'<rect x="{c[0]-w/2:.1f}" y="{c[1]-w/2:.1f}" width="{w:.1f}" height="{w:.1f}" '
                            f'fill="{COLORS["col"]}"/>')
@@ -119,6 +120,8 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
         dim((M.BAY, 3.9), (M.Y_MAX, 3.9), "1.20", 0)
     if view == "plan":
         dim((0, M.Y_MIN - 0.15), (M.SPAN, M.Y_MIN - 0.15), "5.45", 0)
+        p = T((M.SPAN + 0.1, M.Y_MIN - 0.05))
+        out.append(f'<text x="{p[0]:.1f}" y="{p[1]:.1f}" class="dimt" text-anchor="start">косина 2.87°</text>')
     out.append("</svg>")
     return "\n".join(out)
 
@@ -183,7 +186,7 @@ def build_html(an, sc, est, est_base, pieces, title, notes):
 {kpi}
 <h2>Вид А — рама (фасад со стороны дороги)</h2><div class="card">{_svg_view(m, sc, "front")}</div>
 <h2>Вид Б — продольная сторона (левый ряд колонн)</h2><div class="card">{_svg_view(m, sc, "side")}</div>
-<h2>Вид В — план покрытия</h2><div class="card">{_svg_view(m, sc, "plan", H=620)}</div>
+<h2>Вид В — план покрытия (площадка — параллелограмм, рамы параллельны передней кромке)</h2><div class="card">{_svg_view(m, sc, "plan", H=620)}</div>
 <h2>Сечения и проверки</h2><div class="card"><table><thead><tr><th>Элемент</th><th>Сечение</th>
 <th class="n">N сж, кН</th><th class="n">N раст, кН</th><th class="n">M, кН·м</th><th class="n">Исп.</th><th>Определяющая проверка</th></tr></thead>
 <tbody>{legend}</tbody></table></div>

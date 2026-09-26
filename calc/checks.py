@@ -355,7 +355,7 @@ class Analysis:
                     nodes += [e.n1, e.n2]
                 nodes = list(dict.fromkeys(nodes))
                 P = np.array([m.nodes[n] for n in nodes])
-                p1, p2 = mm["p1"], mm["p2"]
+                p1, p2 = m.phys(mm["p1"]), m.phys(mm["p2"])
                 i1 = int(np.argmin(np.linalg.norm(P - p1, axis=1)))
                 i2 = int(np.argmin(np.linalg.norm(P - p2, axis=1)))
                 d = p2 - p1
@@ -412,7 +412,7 @@ class Analysis:
         if mm.get("kind") == "lath":
             # опора — узел на раме (y в frames_y)
             for k, n in enumerate(nodes):
-                if any(abs(P[k][1] - fy) < 1e-6 for fy in m.frames_y):
+                if any(abs(m.logical_y(P[k]) - fy) < 1e-6 for fy in m.frames_y):
                     return n
         else:
             for k, n in enumerate(nodes):
@@ -452,8 +452,8 @@ class Analysis:
                 cm = m.members[ch]
                 s0 = m.elems[cm["elems"][0]].sec
                 s1 = m.elems[mm["elems"][0]].sec
-                d1 = mm["p2"] - mm["p1"]
-                d0 = cm["p2"] - cm["p1"]
+                d1 = m.phys(mm["p2"]) - m.phys(mm["p1"])
+                d0 = m.phys(cm["p2"]) - m.phys(cm["p1"])
                 cos = abs(np.dot(d1, d0)) / (np.linalg.norm(d1) * np.linalg.norm(d0))
                 sin = math.sqrt(max(1e-6, 1 - cos * cos))
                 # ориентация: нормаль к плоскости «раскос–пояс»

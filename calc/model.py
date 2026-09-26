@@ -19,6 +19,11 @@ from fem import Elem, Model
 # ---------------- неизменяемая геометрия ----------------
 SPAN = 5.45
 BAY = 4.60                  # расстояние между рядами рам с колоннами (рама 1 — рама 3)
+# Площадка — параллелограмм: ряды колонн, конёк и карнизы параллельны боковым сторонам,
+# рамы и передняя/задняя кромки кровли — передней кромке площадки (косина 2.87°).
+# Модель строится в «логических» прямоугольных координатах и сдвигается: y_физ = y + x·tg(SKEW).
+# Пролёт 5.45 принят по перпендикуляру между рядами (в плоскости рамы 5.457 — в запас).
+SKEW = math.radians(2.87)
 SLOPE = math.radians(12.0)
 TAN, COS, SIN = math.tan(SLOPE), math.cos(SLOPE), math.sin(SLOPE)
 OVH_L, OVH_R = 0.40, 0.90    # свесы поперёк (гориз. от осей колонн)
@@ -96,6 +101,7 @@ class Scheme:
     roof_x: bool = True              # связи-кресты по скатам
     base: str = "spring"             # 'spring' — упругая заделка в лунке, 'pin' — шарнир
     embed: float = 1.25              # заделка колонны в бетон, м
+    skew: float = SKEW               # косина площадки (0 — прямоугольник)
     ridge_row_group: str = "lath"
     groups: dict = field(default_factory=dict)   # группа -> Section
 
@@ -126,6 +132,7 @@ class Builder:
     def __init__(self, sc: Scheme):
         self.sc = sc
         self.m = Model()
+        self.m.skew_t = math.tan(sc.skew)
         self._member = 0
         self._piece = 0
         self.member_meta = {}

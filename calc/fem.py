@@ -37,8 +37,20 @@ class Model:
     members: dict = field(default_factory=dict)     # member id -> dict(meta)
     pieces: dict = field(default_factory=dict)      # piece id -> dict(meta)
 
+    skew_t: float = 0.0   # tg косины: физическая y = y + x·tg (рамы параллельны передней кромке)
+
+    def phys(self, xyz):
+        """Логические (прямоугольные) координаты -> физические (параллелограмм)."""
+        p = np.array(xyz, dtype=float)
+        p[1] = p[1] + p[0] * self.skew_t
+        return p
+
+    def logical_y(self, p):
+        return p[1] - p[0] * self.skew_t
+
     def add_node(self, xyz, tol=1e-6):
-        p = np.asarray(xyz, dtype=float)
+        """Узел по логическим координатам (x, y, z); хранится в физических."""
+        p = self.phys(xyz)
         if not hasattr(self, "_index"):
             self._index = {}
         key = tuple(np.round(p / 1e-5).astype(np.int64))
