@@ -191,7 +191,7 @@ HATCH = ('<svg width="0" height="0" style="position:absolute"><defs><pattern id=
          '<line x1="0" y1="0" x2="0" y2="6" stroke="var(--dim)" stroke-width="1.2"/></pattern></defs></svg>')
 
 
-def build_html(an, sc, title, notes, details, plan, plates, q, details_split=None):
+def build_html(an, sc, title, notes, details, plan, plates, q, details_split=None, tiles_html=""):
     from report_data import member_table
     import model as _M
     m = an.model
@@ -274,6 +274,7 @@ svg.bar{width:100%;max-width:760px;height:auto;display:block;margin:4px 0}
 .bt2{fill:var(--dim);font-size:12px;font-family:system-ui,sans-serif}
 .bl{margin:8px 0 12px}.bh{font-size:14px}.bd{color:var(--muted);font-size:13px}
 h3{font-size:15px;margin:18px 0 4px}
+.tn{fill:#1e293b;font-size:26px;font-weight:700;font-family:system-ui,sans-serif}
 """
     return f"""<!doctype html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Навес: каркас и раскрой</title>
@@ -306,5 +307,6 @@ h3{font-size:15px;margin:18px 0 4px}
 <h2>Пластины, заглушки</h2><div class="card"><table><thead><tr><th>Позиция</th><th>Размер, мм</th><th class="n">t, мм</th>
 <th class="n">Кол-во</th><th class="n">Масса, кг</th><th>Где</th><th>Из чего резать</th></tr></thead><tbody>{prow}</tbody></table>
 <p class="note">Размеры и сварка фасонок и пластин — на чертежах узлов (uzly.html). Хомуты Ø8 в лунках (по 3 шт.) — по черновику.</p></div>
+<h2>Раскладка и подрезка металлочерепицы</h2>{tiles_html}
 <h2>Примечания</h2><ul>{notes_html}</ul>
 </main></body></html>"""

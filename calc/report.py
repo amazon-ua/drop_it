@@ -15,6 +15,7 @@ import costs as K
 import model as M
 from baseline import baseline_scheme
 from drawing import build_html
+import tile_layout
 from report_data import (PLATES, bar_plan, cutting_plan, fab_details, member_table, piece_list,
                          scheme_from_result)
 
@@ -100,7 +101,8 @@ def main():
     details, _ = fab_details(an.model, sc)                       # по метражу: обрешётина цельная
     details_split, _ = fab_details(an.model, sc, lath_split=True)  # целыми хлыстами: обрешётина со стыком
     bplan = bar_plan(details_split)
-    html_text = build_html(an, sc, title, notes, details, bplan, PLATES, q, details_split)
+    tiles_html, tiles = tile_layout.build_section()
+    html_text = build_html(an, sc, title, notes, details, bplan, PLATES, q, details_split, tiles_html)
     (OUT / "navis_optimized.html").write_text(html_text, encoding="utf-8")
 
     # ---------------- XLSX ----------------
@@ -169,6 +171,21 @@ def main():
                          "; ".join(sorted(set(nm for _, nm in b["cuts"]))), round(b["free"], 3)])
     sheet("Раскрой (хлысты 6 и 12 м)", ["Профиль", "Хлыст №", "Резы, м", "Заготовки", "Остаток, м"], rows,
           [14, 8, 44, 60, 10])
+
+    rows = []
+    for sl in tiles["slopes"]:
+        for s_ in sl["sheets"]:
+            cb, cf = s_["cut_back"], s_["cut_front"]
+            cut = ("задняя кромка %d→%d мм" % (cb[0] * 1000, cb[1] * 1000) if max(cb) > 1e-4 else "") + \
+                  ("передняя кромка %d→%d мм" % (cf[0] * 1000, cf[1] * 1000) if max(cf) > 1e-4 else "")
+            rows.append([sl["title"], s_["k"], round(sl["L"], 3), round(s_["width"][0] * 1000),
+                         round(s_["width"][1] * 1000), cut or "целый"])
+    sheet("Металлочерепица", ["Скат", "Лист №", "Длина листа, м", "Полезн. ширина у карниза, мм",
+                              "у конька, мм", "Подрезка (у карниза → у конька)"], rows, [26, 8, 14, 16, 12, 40])
+    ws_t = wb["Металлочерепица"]
+    ws_t.cell(len(rows) + 3, 1).value = (f"Итого {tiles['n']} листов; площадь по габаритной ширине 1.18 м — "
+                                         f"{tiles['area_full']:.1f} м², по полезной — {tiles['area_use']:.1f} м²; "
+                                         f"кровля {tiles['roof']:.1f} м². Укладка от переднего края (дорога).")
 
     rows = [[nm, size, t if t else "—", n, round(mass * n, 2), where, src] for nm, size, t, n, mass, where, src in PLATES]
     sheet("Пластины", ["Позиция", "Размер, мм", "t, мм", "Кол-во", "Масса, кг", "Где", "Из чего резать"], rows,
@@ -251,6 +268,18 @@ def main():
     for name, d in sorted(est["by_sec"].items(), key=lambda kv: -kv[1]["cost"]):
         w(f"| □{name} | {d['L']:.2f} | {d['kg']:.1f} | {d['sec'].price:g} | {fmt(d['cost'])} |")
     w(f"| **Итого трубы** | | | | **{fmt(est['pipes'])}** |\n")
+    w("## Металлочерепица: раскладка и подрезка\n")
+    w("Схема — в `output/navis_optimized.html`. Листы кладутся перпендикулярно карнизу, от переднего края (дорога) "
+      "к заднему; из-за косины 2.87° передний и задний края кровли идут наискось — крайние листы подрезаются по косой.\n")
+    w("| Скат | Листов | Длина листа, м | Лист 1 (передний край) | Последний лист (задний край) |\n|---|---:|---:|---|---|")
+    for sl in tiles["slopes"]:
+        s1, sn = sl["sheets"][0], sl["sheets"][-1]
+        c1 = max(s1["cut_front"]) * 1000
+        w(f"| {sl['title']} | {sl['n']} | {sl['L']:.2f} | косой подрез 0…{c1:.0f} мм | "
+          f"полезная ширина {sn['width'][0]*1000:.0f}…{sn['width'][1]*1000:.0f} мм (подрез по косой) |")
+    w(f"\nИтого {tiles['n']} листов; по габаритной ширине 1.18 м — {tiles['area_full']:.1f} м², по полезной — "
+      f"{tiles['area_use']:.1f} м² (площадь кровли {tiles['roof']:.1f} м²). В смете заложено 50 м² — если цена за м² "
+      "габаритной площади листа, закупка будет около 57 м², уточните у поставщика.\n")
     w("## Смета: было → стало\n")
     w("| Статья | Было, грн | Стало, грн | Δ, грн |\n|---|---:|---:|---:|")
     for n_, v, k in est["lines"]:
