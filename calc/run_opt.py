@@ -57,12 +57,14 @@ def label(p):
     return s
 
 
-LOADS = {"all": M.Loads(), "normal": M.Loads(), "ch07": M.Loads(Ch=0.70)}
+LOADS = {"all": M.Loads(), "normal": M.Loads(), "ch07": M.Loads(Ch=0.70),
+         "normal07": M.Loads(Ch=0.70)}
+NORMAL_MODES = ("normal", "normal07")
 
 
 def run_one(args):
     p, price_mode = args
-    secs = SECS_NORMAL if price_mode == "normal" else SECS_ALL
+    secs = SECS_NORMAL if price_mode in NORMAL_MODES else SECS_ALL
     cal = calibration()
     sc = M.Scheme(name=label(p), **p)
     sc.groups = O.default_groups(sc, secs)

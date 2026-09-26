@@ -6,13 +6,13 @@ from multiprocessing import Pool
 import model as M
 import optimize as O
 from report_data import scheme_from_result
-from run_opt import OUT, SECS_ALL, SECS_NORMAL, calibration
+from run_opt import LOADS, NORMAL_MODES, OUT, SECS_ALL, SECS_NORMAL, calibration
 
 
 def work(args):
     r, mode = args
-    secs = SECS_NORMAL if mode == "normal" else SECS_ALL
-    loads = M.Loads(Ch=0.70) if mode == "ch07" else M.Loads()
+    secs = SECS_NORMAL if mode in NORMAL_MODES else SECS_ALL
+    loads = LOADS[mode]
     sc = scheme_from_result(r)
     res = O.size_scheme(sc, loads, secs, calibration(), max_greedy=160)
     sc2, an, est, q = res
