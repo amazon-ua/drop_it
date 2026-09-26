@@ -42,8 +42,12 @@ svg.nd{width:100%;height:auto;display:block;background:var(--card)}
 h3{font-size:15px;margin:14px 0 6px}
 ol li,ul li{margin:3px 0}
 .wk{display:inline-block;min-width:22px;text-align:center;border-radius:4px;background:#f59e0b;color:#111;font-weight:700;margin-right:6px}
+.mmrow{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.mmimg{flex:0 1 420px;min-width:260px}.mmtxt{flex:1 1 260px;font-size:14px}.mmtxt p{margin:6px 0}
+svg.mm{background:transparent}
 @media print{
   body{background:#fff}
+  .mmimg{flex:0 0 46%}
   main{max-width:none;padding:0}
   .grid2{grid-template-columns:1fr}
   .grid2 > .card:nth-child(2){width:62%;margin:0 auto}
@@ -354,8 +358,95 @@ def node_C_face(g, e, z_face, h):
     return s.svg("узел В — вид на грань колонны")
 
 
+# ---------------- мини-карта ----------------
+def minimap(model, marks, primary, label):
+    """Аксонометрия всего навеса с выделением узлов.
+
+    marks — список логических координат (x, y, z) всех таких узлов, primary — показанный на чертеже."""
+    import numpy as np
+    eye = np.array([-5.5, -8.5, 7.5])
+    center = np.array([M.SPAN / 2, M.BAY / 2, 1.8])
+    fw = center - eye
+    fw /= np.linalg.norm(fw)
+    rt = np.cross(fw, [0, 0, 1.0])
+    rt /= np.linalg.norm(rt)
+    up = np.cross(rt, fw)
+
+    def pr(p):
+        p = np.asarray(p, float)
+        return float(p @ rt), float(-(p @ up))
+    pts = [pr(n) for n in model.nodes]
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    x0, x1, y0, y1 = min(xs) - 0.6, max(xs) + 0.6, min(ys) - 0.5, max(ys) + 0.4
+    S = 60.0
+    W, H = (x1 - x0) * S, (y1 - y0) * S
+
+    def P(p):
+        a, b = pr(p)
+        return (a - x0) * S, (b - y0) * S
+    o = [f'<svg viewBox="0 0 {W:.0f} {H:.0f}" class="nd mm" role="img" aria-label="{html.escape(label)}">']
+    # земля — контур площадки под навесом
+    gpts = [model.phys((x, y, 0.0)) for x, y in ((-0.6, -1.4), (M.SPAN + 1.1, -1.4), (M.SPAN + 1.1, M.BAY + 1.4), (-0.6, M.BAY + 1.4))]
+    o.append('<polygon points="' + " ".join(f"{P(p)[0]:.1f},{P(p)[1]:.1f}" for p in gpts)
+             + '" fill="#94a3b8" fill-opacity="0.12" stroke="#94a3b8" stroke-width="1"/>')
+    # коридор проезда
+    cp = [model.phys((x, y, 0.0)) for x, y in ((M.CORRIDOR_X[0], -1.4), (M.CORRIDOR_X[1], -1.4),
+                                               (M.CORRIDOR_X[1], M.BAY + 1.4), (M.CORRIDOR_X[0], M.BAY + 1.4))]
+    o.append('<polygon points="' + " ".join(f"{P(p)[0]:.1f},{P(p)[1]:.1f}" for p in cp)
+             + '" fill="none" stroke="#16a34a" stroke-width="1" stroke-dasharray="5 4"/>')
+    # стержни (обрешётка — тонко и бледно)
+    order = {"lath": 0, "sb": 1, "sd": 1, "tie": 2, "kp": 2, "strut": 2, "raf": 3, "stub": 4, "col": 4}
+    els = sorted(model.elems, key=lambda e: order.get(model.members[e.member]["group"], 2))
+    for e in els:
+        g = model.members[e.member]["group"]
+        a, b = P(model.nodes[e.n1]), P(model.nodes[e.n2])
+        w, op = (0.7, 0.22) if g == "lath" else ((3.2, 0.95) if g == "col" else (2.2, 0.9))
+        o.append(f'<line x1="{a[0]:.1f}" y1="{a[1]:.1f}" x2="{b[0]:.1f}" y2="{b[1]:.1f}" stroke="{COL.get(g, "#555")}" '
+                 f'stroke-width="{w}" stroke-opacity="{op}" stroke-linecap="round"/>')
+    # подписи рядов колонн и сторон
+    for (xc, yc), (nm, zb, dep, zg) in M.COLUMN_BASES.items():
+        a = P(model.phys((xc, yc, zb)))
+        o.append(f'<text x="{a[0]:.1f}" y="{a[1]+20:.1f}" class="lb" text-anchor="middle" '
+                 f'style="font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:4px">{nm}</text>')
+    a = P(model.phys((M.SPAN / 2, -1.4, 0.0)))
+    o.append(f'<text x="{a[0]:.1f}" y="{a[1]+22:.1f}" class="lbs" text-anchor="middle">дорога / въезд</text>')
+    # отметки узлов
+    for m in marks:
+        a = P(model.phys(m))
+        o.append(f'<circle cx="{a[0]:.1f}" cy="{a[1]:.1f}" r="9" fill="#f59e0b" fill-opacity="0.35" stroke="#b45309" stroke-width="1.5"/>')
+    a = P(model.phys(primary))
+    o.append(f'<circle cx="{a[0]:.1f}" cy="{a[1]:.1f}" r="17" fill="none" stroke="#dc2626" stroke-width="3.5"/>')
+    o.append(f'<line x1="{a[0]+14:.1f}" y1="{a[1]-14:.1f}" x2="{a[0]+60:.1f}" y2="{a[1]-60:.1f}" stroke="#dc2626" stroke-width="2"/>')
+    o.append(f'<text x="{a[0]+64:.1f}" y="{a[1]-62:.1f}" style="fill:#dc2626;font-size:24px;font-weight:700;'
+             f'font-family:system-ui,sans-serif;paint-order:stroke;stroke:#fff;stroke-width:5px">{html.escape(label)}</text>')
+    o.append("</svg>")
+    return "".join(o)
+
+
+def minimap_block(model, marks, primary, label, text):
+    return (f'<div class="card mmrow"><div class="mmimg">{minimap(model, marks, primary, label)}</div>'
+            f'<div class="mmtxt"><b>Где находится</b><p>{text}</p>'
+            f'<p class="note">Красное кольцо — узел, показанный на чертеже; жёлтые точки — такие же узлы на навесе. '
+            f'Зелёный пунктир — коридор проезда.</p></div></div>')
+
+
+
 def build(final, nf):
     g = geometry(final["groups"])
+    from report_data import scheme_from_result
+    mdl = M.build(scheme_from_result(final))
+    zA = M.Z_NODE
+    marksA = [(x, y, zA) for x in (0.0, M.SPAN) for y in (0.0, M.BAY)]
+    mmA = minimap_block(mdl, marksA, (0.0, 0.0, zA), "узел А",
+                        "Оголовки всех четырёх колонн — 4 одинаковых узла (у правого ряда — зеркально). "
+                        "На чертеже — колонна <b>Л1</b>: левый ряд, рама 1 со стороны дороги. Здесь стропило "
+                        "крайней рамы проходит над колонной, а затяжка этой рамы приходит на колонну.")
+    marksB = [(x, M.BAY / 2, M.Z_TIE) for x in (0.0, M.SPAN)]
+    mmB = minimap_block(mdl, marksB, (0.0, M.BAY / 2, M.Z_TIE), "узел Б",
+                        "Опоры средней рамы (рама 2) — 2 одинаковых узла, по одному в каждом ряду колонн, "
+                        "посередине между колоннами. Здесь у средней рамы нет колонны: её стропило и затяжка "
+                        "опираются на вершину Λ-образной боковой фермы (два красных раскоса от колонн). "
+                        "На чертеже — узел у левого ряда (между Л1 и Л3).")
     svgA = node_A(g)
     svgA2 = node_A_section(g)
     svgB = node_A(g, mid=True)
@@ -419,6 +510,7 @@ def build(final, nf):
 </ul>
 
 <h2 class="pb">Узел А — оголовок колонны (стропило + затяжка + колонна)</h2>
+{mmA}
 <div class="grid2"><div class="card">{svgA}</div><div class="card">{svgA2}</div></div>
 <div class="card">
 <h3>Как устроен</h3>
@@ -453,6 +545,7 @@ def build(final, nf):
 </ul></div>
 
 <h2 class="pb">Узел Б — опора средней рамы на боковую ферму</h2>
+{mmB}
 <div class="grid2"><div class="card">{svgB}</div><div class="card">{svgB2}</div></div>
 <div class="card">
 <h3>Как устроен</h3>
