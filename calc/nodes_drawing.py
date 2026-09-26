@@ -42,6 +42,16 @@ svg.nd{width:100%;height:auto;display:block;background:var(--card)}
 h3{font-size:15px;margin:14px 0 6px}
 ol li,ul li{margin:3px 0}
 .wk{display:inline-block;min-width:22px;text-align:center;border-radius:4px;background:#f59e0b;color:#111;font-weight:700;margin-right:6px}
+@media print{
+  body{background:#fff}
+  main{max-width:none;padding:0}
+  .grid2{grid-template-columns:1fr}
+  .grid2 > .card:nth-child(2){width:62%;margin:0 auto}
+  h2.pb{break-before:page;page-break-before:always}
+  .card,.grid2,tr,li{break-inside:avoid;page-break-inside:avoid}
+  h2,h3{break-after:avoid;page-break-after:avoid}
+  h2{break-before:auto}
+}
 """
 
 
@@ -408,7 +418,7 @@ def build(final, nf):
 подвеска и подкосы фермы привариваются по контуру.</li>
 </ul>
 
-<h2>Узел А — оголовок колонны (стропило + затяжка + колонна)</h2>
+<h2 class="pb">Узел А — оголовок колонны (стропило + затяжка + колонна)</h2>
 <div class="grid2"><div class="card">{svgA}</div><div class="card">{svgA2}</div></div>
 <div class="card">
 <h3>Как устроен</h3>
@@ -442,7 +452,7 @@ def build(final, nf):
 толщина 5 мм принята конструктивно (под сварку и жёсткость узла).</li>
 </ul></div>
 
-<h2>Узел Б — опора средней рамы на боковую ферму</h2>
+<h2 class="pb">Узел Б — опора средней рамы на боковую ферму</h2>
 <div class="grid2"><div class="card">{svgB}</div><div class="card">{svgB2}</div></div>
 <div class="card">
 <h3>Как устроен</h3>
@@ -469,7 +479,7 @@ def build(final, nf):
 <li>Стойка-вставка: N = {f('Б_стойка_вставка', 'Nc'):.1f} кН, M = {f('Б_стойка_вставка', 'M'):.2f} кН·м — проверена в общем расчёте.</li>
 </ul></div>
 
-<h2>Узел В — раскос и нижний пояс боковой фермы у колонны (+2.100)</h2>
+<h2 class="pb">Узел В — раскос и нижний пояс боковой фермы у колонны (+2.100)</h2>
 <div class="grid2"><div class="card">{svgC}</div><div class="card">{svgC2}</div></div>
 <div class="card">
 <h3>Как устроен</h3>
@@ -496,7 +506,7 @@ def build(final, nf):
 эксцентриситета ≈ {Mecc/2:.2f} кН·м) — напряжения ≈ {sig_c:.0f} МПа при Ry = 230 МПа.</li></ul>
 </div>
 
-<h2>Пластины на весь навес</h2>
+<h2 class="pb">Пластины на весь навес</h2>
 <div class="card"><table><thead><tr><th>Позиция</th><th>Размер, мм</th><th class="n">Кол-во</th><th>Где</th></tr></thead><tbody>
 <tr><td>Фасонка</td><td>трапеция {gus_w:.0f} × {gus_h1:.0f}/{gus_h2:.0f}, t=5</td><td class="n">12</td><td>узлы А (4 × 2) и Б (2 × 2)</td></tr>
 <tr><td>Опорная пластина</td><td>{CAP['len']}×60×{CAP['t']}</td><td class="n">6</td><td>под стропилом на колоннах и стойках</td></tr>
