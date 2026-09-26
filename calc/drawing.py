@@ -43,7 +43,7 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
     if view == "front":
         xmin, xmax, ymin, ymax = -1.9, M.SPAN + 2.0, -0.62, 4.0
     elif view == "side":
-        xmin, xmax, ymin, ymax = M.Y_MIN - 0.3, M.Y_MAX + 0.3, -0.62, 4.0
+        xmin, xmax, ymin, ymax = M.Y_MIN - 1.6, M.Y_MAX + 1.7, -0.62, 4.3
     else:
         xmin, xmax, ymin, ymax = -0.9, M.SPAN + 1.2, M.Y_MIN - 0.3, M.Y_MAX + 0.6
     sx = (W - 2 * pad) / (xmax - xmin)
@@ -87,6 +87,41 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
         x2, _ = T((M.CORRIDOR_X[1], 0))
         out.append(f'<line x1="{x1:.1f}" y1="{pad/2}" x2="{x1:.1f}" y2="{H2-pad/2}" class="corrl"/>')
         out.append(f'<line x1="{x2:.1f}" y1="{pad/2}" x2="{x2:.1f}" y2="{H2-pad/2}" class="corrl"/>')
+    if view == "side":
+        # кровля и стропила (схематично, пунктир): проекция на плоскость левого ряда колонн
+        import math as _m
+        raf = sc.groups["raf"]
+        lath = sc.groups["lath"]
+        dz_top = raf.h / 2 / _m.cos(M.SLOPE)            # от оси стропила до его верха по вертикали
+        dz_roof = dz_top + lath.h + 0.04                 # + обрешётка + профиль металлочерепицы ~40 мм
+        xe, xr, xe2 = -M.OVH_L, M.X_RIDGE, M.SPAN + M.OVH_R
+
+        def PP(x, y, z):
+            p = model.phys((x, y, z))
+            return T((p[1], p[2]))
+        for fy in model.frames_y:
+            a, b = PP(xe, fy, M.z_rafter(xe)), PP(xr, fy, M.z_rafter(xr))
+            out.append(f'<line x1="{a[0]:.1f}" y1="{a[1]:.1f}" x2="{b[0]:.1f}" y2="{b[1]:.1f}" '
+                       f'stroke="{COLORS["raf"]}" stroke-width="{max(1.5, raf.b * s):.1f}" stroke-opacity="0.45" '
+                       f'stroke-dasharray="10 6"/>')
+        # контур левого ската по верху кровли
+        pts = [PP(xe, M.Y_MIN, M.z_rafter(xe) + dz_roof), PP(xe, M.Y_MAX, M.z_rafter(xe) + dz_roof),
+               PP(xr, M.Y_MAX, M.z_rafter(xr) + dz_roof), PP(xr, M.Y_MIN, M.z_rafter(xr) + dz_roof)]
+        out.append('<polygon points="' + " ".join(f"{p[0]:.1f},{p[1]:.1f}" for p in pts)
+                   + '" fill="#94a3b8" fill-opacity="0.12" stroke="var(--fg)" stroke-width="1.4" stroke-dasharray="7 4"/>')
+        # карниз правого ската (ниже — свес 0.90)
+        a, b = PP(xe2, M.Y_MIN, M.z_rafter(xe2) + dz_roof), PP(xe2, M.Y_MAX, M.z_rafter(xe2) + dz_roof)
+        out.append(f'<line x1="{a[0]:.1f}" y1="{a[1]:.1f}" x2="{b[0]:.1f}" y2="{b[1]:.1f}" stroke="var(--dim)" '
+                   f'stroke-width="1.2" stroke-dasharray="3 4"/>')
+        lab = PP(xr, M.Y_MAX, M.z_rafter(xr) + dz_roof)
+        out.append(f'<text x="{lab[0]+8:.1f}" y="{lab[1]+4:.1f}" class="lev">конёк</text>')
+        lab = PP(xe, M.Y_MAX, M.z_rafter(xe) + dz_roof)
+        out.append(f'<text x="{lab[0]+8:.1f}" y="{lab[1]+4:.1f}" class="lev">карниз левого ската</text>')
+        lab = PP(xe2, M.Y_MIN, M.z_rafter(xe2) + dz_roof)
+        out.append(f'<text x="{lab[0]-8:.1f}" y="{lab[1]+14:.1f}" class="lev" text-anchor="end">карниз правого ската</text>')
+        for fy, nm in zip(model.frames_y, ("рама 1", "рама 2", "рама 3")):
+            lab = PP(xr, fy, M.z_rafter(xr) + dz_roof)
+            out.append(f'<text x="{lab[0]:.1f}" y="{lab[1]-8:.1f}" class="lev" text-anchor="middle">{nm}</text>')
     order = ["lath", "xb", "sb", "st", "eave", "tie", "kp", "strut", "knee", "sd", "kl", "raf", "stub", "col"]
     segs.sort(key=lambda t: order.index(t[2]) if t[2] in order else 0)
     for a, b, g, sec in segs:
@@ -126,8 +161,8 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
             out.append(f'<text x="{p[0]+8:.1f}" y="{p[1]+14:.1f}" class="lev">{nm}: верх бетона {zb:+.2f}</text>')
     if view == "side":
         dim((0, -0.52), (M.BAY, -0.52), "4.60", 0)
-        dim((M.Y_MIN, 3.9), (0, 3.9), "1.18", 0)
-        dim((M.BAY, 3.9), (M.Y_MAX, 3.9), "1.20", 0)
+        dim((M.Y_MIN, 4.2), (0, 4.2), "1.18", 0)
+        dim((M.BAY, 4.2), (M.Y_MAX, 4.2), "1.20", 0)
     if view == "plan":
         dim((0, M.Y_MIN - 0.15), (M.SPAN, M.Y_MIN - 0.15), "5.45", 0)
         p = T((M.SPAN + 0.1, M.Y_MIN - 0.05))
@@ -283,7 +318,7 @@ h3{font-size:15px;margin:18px 0 4px}
 <p class="sub">{html.escape(title)}</p>
 {kpi}
 <h2>Вид А — рама (фасад со стороны дороги)</h2><div class="card">{_svg_view(m, sc, "front")}</div>
-<h2>Вид Б — продольная сторона (левый ряд колонн)</h2><div class="card">{_svg_view(m, sc, "side")}</div>
+<h2>Вид Б — продольная сторона (левый ряд колонн); кровля и стропила — пунктиром</h2><div class="card">{_svg_view(m, sc, "side")}</div>
 <h2>Вид В — план покрытия (площадка — параллелограмм, рамы параллельны передней кромке)</h2><div class="card">{_svg_view(m, sc, "plan", H=620)}</div>
 <h2>Сечения и проверки</h2><div class="card"><table><thead><tr><th>Элемент</th><th>Сечение</th>
 <th class="n">N сж, кН</th><th class="n">N раст, кН</th><th class="n">M, кН·м</th><th class="n">Исп.</th><th>Определяющая проверка</th></tr></thead>
