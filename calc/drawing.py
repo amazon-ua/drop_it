@@ -41,9 +41,9 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
             a, b = (p1[0], p1[1]), (p2[0], p2[1])
         segs.append((a, b, g, e.sec))
     if view == "front":
-        xmin, xmax, ymin, ymax = -1.9, M.SPAN + 2.0, -0.4, 4.0
+        xmin, xmax, ymin, ymax = -1.9, M.SPAN + 2.0, -0.62, 4.0
     elif view == "side":
-        xmin, xmax, ymin, ymax = M.Y_MIN - 0.3, M.Y_MAX + 0.3, -0.4, 4.0
+        xmin, xmax, ymin, ymax = M.Y_MIN - 0.3, M.Y_MAX + 0.3, -0.62, 4.0
     else:
         xmin, xmax, ymin, ymax = -0.9, M.SPAN + 1.2, M.Y_MIN - 0.3, M.Y_MAX + 0.6
     sx = (W - 2 * pad) / (xmax - xmin)
@@ -103,7 +103,7 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
         out.append(f'<line x1="{a_[0]:.1f}" y1="{a_[1]+off:.1f}" x2="{b_[0]:.1f}" y2="{b_[1]+off:.1f}" class="dim"/>')
         out.append(f'<text x="{(a_[0]+b_[0])/2:.1f}" y="{(a_[1]+b_[1])/2+off-4:.1f}" class="dimt">{text}</text>')
     if view == "front":
-        dim((0, -0.25), (M.SPAN, -0.25), "5.45", 0)
+        dim((0, -0.52), (M.SPAN, -0.52), "5.45", 0)
         dim((-M.OVH_L, 3.9), (0, 3.9), "0.40", 0)
         dim((M.SPAN, 3.9), (M.SPAN + M.OVH_R, 3.9), "0.90", 0)
         for z, t, x_, anc in ((M.Z_NODE, "+3.10 (узел)", M.SPAN + M.OVH_R + 0.05, "start"),
@@ -114,8 +114,18 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
         if sc.knee_t:
             p = T((-0.05, sc.knee_z))
             out.append(f'<text x="{p[0]:.1f}" y="{p[1]+4:.1f}" class="lev" text-anchor="end">+{sc.knee_z:.2f}</text>')
+    if view in ("front", "side"):
+        # отметки верха бетона у колонн этого вида
+        for (xc, yc), (nm, zb, dep, zg) in M.COLUMN_BASES.items():
+            if view == "front" and abs(yc) > 1e-6:
+                continue
+            if view == "side" and abs(xc) > 1e-6:
+                continue
+            u = xc if view == "front" else yc
+            p = T((u, zb))
+            out.append(f'<text x="{p[0]+8:.1f}" y="{p[1]+14:.1f}" class="lev">{nm}: верх бетона {zb:+.2f}</text>')
     if view == "side":
-        dim((0, -0.25), (M.BAY, -0.25), "4.60", 0)
+        dim((0, -0.52), (M.BAY, -0.52), "4.60", 0)
         dim((M.Y_MIN, 3.9), (0, 3.9), "1.18", 0)
         dim((M.BAY, 3.9), (M.Y_MAX, 3.9), "1.20", 0)
     if view == "plan":

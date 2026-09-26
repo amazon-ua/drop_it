@@ -398,7 +398,7 @@ class Analysis:
                 for yc in (0.0, M.BAY):
                     n = m.add_node((xc, yc, M.Z_NODE))
                     dh = np.linalg.norm(U[n][:2])
-                    H = M.Z_NODE - M.Z_BASE
+                    H = M.Z_NODE - M.z_base(xc, yc)
                     lim = H / 150
                     key = f"sway_{xc}_{yc}"
                     r = res.setdefault(key, dict(u=0.0, gov=""))
@@ -518,7 +518,7 @@ class Analysis:
         res = {}
         for xc in (0.0, M.SPAN):
             for yc in (0.0, M.BAY):
-                n = m.add_node((xc, yc, M.Z_BASE))
+                n = m.add_node((xc, yc, M.z_base(xc, yc)))
                 attached = [ei for ei, e in enumerate(m.elems) if n in (e.n1, e.n2)]
                 worst = dict(u=0.0)
                 for cname, coeffs in self.uls.items():

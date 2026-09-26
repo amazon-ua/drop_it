@@ -31,7 +31,26 @@ Y_MIN, Y_MAX = -1.18, BAY + 1.20   # кромки кровли вдоль кон
 X_RIDGE = SPAN / 2
 Z_NODE = 3.10               # пересечение осей стропила и колонны
 Z_TIE = 3.00                # ось затяжки / обвязки (низ ≥ 2.95 > 2.90)
-Z_BASE = -0.08              # верх бетона (заделка колонны)
+Z_BASE = -0.08              # верх бетона (заделка колонны), среднее — для справки
+# Фактические отметки по разбивке черновика (таблица «Привязка колонн к фактическому рельефу»):
+# площадка не выравнивается, верх бетона у левых лунок на 2 см выше земли, у правых — в уровень щебня.
+# Ключ — (x, y) оси колонны: x = 0 левый ряд (Л), x = SPAN правый (П); y = 0 рама 1, y = BAY рама 3.
+COLUMN_BASES = {
+    # (x, y): (имя, верх бетона, глубина бетона, земля)
+    (0.0, 0.0): ("Л1", -0.06, 1.20, -0.08),
+    (5.45, 0.0): ("П1", -0.09, 1.30, -0.21),
+    (0.0, 4.60): ("Л3", -0.25, 1.20, -0.27),
+    (5.45, 4.60): ("П3", -0.27, 1.35, -0.45),
+}
+Z_COL_TOP = 3.043           # верх колонны под опорной пластиной (низ стропила −6 мм) по оси колонны
+
+
+def z_base(x, y):
+    return COLUMN_BASES[(round(x, 2), round(y, 2))][1]
+
+
+def column_name(x, y):
+    return COLUMN_BASES[(round(x, 2), round(y, 2))][0]
 CORRIDOR_X = (0.40, 4.40)
 CORRIDOR_H = 2.90
 LATH_PITCH = 0.35
@@ -242,7 +261,7 @@ def build(sc: Scheme):
     col_piece = {}
     for xc in xcols:
         for yc in col_y:
-            zs = [Z_BASE, Z_TIE]
+            zs = [z_base(xc, yc), Z_TIE]
             if sc.knee_t:
                 zs.append(sc.knee_z)
             if sc.frames == 3:
@@ -336,7 +355,7 @@ def build(sc: Scheme):
     m = b.m
     for xc in xcols:
         for yc in col_y:
-            n = m.add_node((xc, yc, Z_BASE))
+            n = m.add_node((xc, yc, z_base(xc, yc)))
             if sc.base == "pin":
                 m.springs[n] = [None, None, None, 0.0, 0.0, None]
             else:
@@ -352,7 +371,8 @@ def build(sc: Scheme):
 
 
 # ---------------- грунт / заделка ----------------
-SOIL = dict(phi=22.0, gamma=18e3, c=0.0, kh=10e6, hole_b=0.30, hole_L=1.20)
+# hole_L — рабочая глубина бетона в грунте: у всех лунок ≈ 1.18 м (глубина бетона минус выступ над землёй / щебень)
+SOIL = dict(phi=22.0, gamma=18e3, c=0.0, kh=10e6, hole_b=0.30, hole_L=1.18)
 
 
 def base_rot_stiffness(b=None, L=None, kh=None):

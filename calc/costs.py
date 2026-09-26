@@ -62,7 +62,9 @@ def quantities(model, sc):
         g = meta["group"]
         sec = piece_sec[pid]
         if g == "col":
-            L += sc.embed
+            # элементы модели идут до оси стропила (+3.10); фактический верх колонны — под опорной
+            # пластиной (+3.043); плюс заделка в бетон
+            L += sc.embed - (M.Z_NODE - M.Z_COL_TOP)
         pieces.append(dict(id=pid, group=g, sec=sec, L=L, meta=meta))
     # сварные соединения: концы деталей, примыкающие к другим деталям
     node_pieces = defaultdict(set)

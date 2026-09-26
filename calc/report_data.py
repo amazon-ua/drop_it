@@ -38,12 +38,20 @@ def piece_list(model, sc):
     for p in q["pieces"]:
         L = round(p["L"], 3)
         key = (p["group"], p["sec"].name, L)
+        if p["group"] == "col":
+            key = (p["group"], p["sec"].name, L, M.column_name(p["meta"]["x"], p["meta"]["y"]))
         rows[key]["n"] += 1
         rows[key]["sec"] = p["sec"]
         rows[key]["parts"] = p["parts"]
     out = []
-    for (g, sn, L), d in sorted(rows.items(), key=lambda kv: (list(M.GROUP_INFO).index(kv[0][0]), -kv[0][2])):
-        out.append(dict(group=g, name=M.GROUP_INFO[g][0], sec=sn, L=L, n=d["n"], parts=d["parts"],
+    for key, d in sorted(rows.items(), key=lambda kv: (list(M.GROUP_INFO).index(kv[0][0]), -kv[0][2])):
+        g, sn, L = key[:3]
+        name = M.GROUP_INFO[g][0]
+        if g == "col":
+            nm = key[3]
+            zb = [v for v in M.COLUMN_BASES.values() if v[0] == nm][0][1]
+            name = f"Колонна {nm} (верх бетона {zb:+.2f})"
+        out.append(dict(group=g, name=name, sec=sn, L=L, n=d["n"], parts=d["parts"],
                         mass=d["sec"].mass * L * d["n"], price=d["sec"].price))
     return out, q
 
