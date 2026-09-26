@@ -245,20 +245,37 @@ class Solver:
         # для пружин реакция = k·u (уже учтена в K)
         return R
 
-    def KG(self, ends):
+    def _prep_vec(self):
+        if hasattr(self, "_dofs_arr"):
+            return
         m = self.m
-        rows, cols, vals = [], [], []
-        for ei, e in enumerate(m.elems):
-            N = -ends[ei][0]  # усилие на конце 1: сила на узел; N(растяжение) = −f0
-            kgl = kg_local(e.L, N)
-            kg = e.T.T @ kgl @ e.T
-            d = self._dofs(e)
-            rows.append(np.repeat(d, 12))
-            cols.append(np.tile(d, 12))
-            vals.append(kg.ravel())
-        n = m.ndof
-        return sp.coo_matrix((np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))),
-                             shape=(n, n)).tocsr()
+        self._dofs_arr = np.array([self._dofs(e) for e in m.elems])
+        self._T_arr = np.array([e.T for e in m.elems])
+        self._L_arr = np.array([e.L for e in m.elems])
+        L = self._L_arr[:, None, None]
+        base = np.zeros((len(m.elems), 12, 12))
+        # плоскость x–y (v, θz)
+        iv = [1, 5, 7, 11]
+        Bv = lambda L: np.array([[36, 3 * L, -36, 3 * L], [3 * L, 4 * L * L, -3 * L, -L * L],
+                                 [-36, -3 * L, 36, -3 * L], [3 * L, -L * L, -3 * L, 4 * L * L]])
+        iw = [2, 4, 8, 10]
+        Bw = lambda L: np.array([[36, -3 * L, -36, -3 * L], [-3 * L, 4 * L * L, 3 * L, -L * L],
+                                 [-36, 3 * L, 36, 3 * L], [-3 * L, -L * L, 3 * L, 4 * L * L]])
+        for k, Lk in enumerate(self._L_arr):
+            base[k][np.ix_(iv, iv)] = Bv(Lk) / (30 * Lk)
+            base[k][np.ix_(iw, iw)] = Bw(Lk) / (30 * Lk)
+        # глобальная «единичная» геометрическая матрица (на N = 1)
+        self._KG1 = np.einsum("nji,njk,nkl->nil", self._T_arr, base, self._T_arr)
+        d = self._dofs_arr
+        self._rows = np.repeat(d, 12, axis=1).ravel()
+        self._cols = np.tile(d, (1, 12)).ravel()
+
+    def KG(self, ends):
+        self._prep_vec()
+        N = -np.array([f[0] for f in ends])
+        vals = (self._KG1 * N[:, None, None]).ravel()
+        n = self.m.ndof
+        return sp.coo_matrix((vals, (self._rows, self._cols)), shape=(n, n)).tocsr()
 
     def buckling(self, ends, nmodes=8):
         """Наименьшие коэффициенты критической нагрузки α_cr и формы."""

@@ -40,7 +40,7 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
             a, b = (p1[0], p1[1]), (p2[0], p2[1])
         segs.append((a, b, g, e.sec))
     if view == "front":
-        xmin, xmax, ymin, ymax = -0.9, M.SPAN + 1.2, -0.4, 4.0
+        xmin, xmax, ymin, ymax = -1.9, M.SPAN + 2.0, -0.4, 4.0
     elif view == "side":
         xmin, xmax, ymin, ymax = M.Y_MIN - 0.3, M.Y_MAX + 0.3, -0.4, 4.0
     else:
@@ -105,9 +105,11 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
         dim((0, -0.25), (M.SPAN, -0.25), "5.45", 0)
         dim((-M.OVH_L, 3.9), (0, 3.9), "0.40", 0)
         dim((M.SPAN, 3.9), (M.SPAN + M.OVH_R, 3.9), "0.90", 0)
-        for z, t in ((M.Z_NODE, "+3.10"), (M.z_rafter(M.X_RIDGE), "+3.68"), (M.Z_TIE, "+3.00")):
-            p = T((M.SPAN + M.OVH_R + 0.05, z))
-            out.append(f'<text x="{p[0]:.1f}" y="{p[1]+4:.1f}" class="lev">{t}</text>')
+        for z, t, x_, anc in ((M.Z_NODE, "+3.10 (узел)", M.SPAN + M.OVH_R + 0.05, "start"),
+                              (M.z_rafter(M.X_RIDGE), "+3.68 (конёк)", M.SPAN + M.OVH_R + 0.05, "start"),
+                              (M.Z_TIE, "+3.00 (ось затяжки)", -M.OVH_L - 0.05, "end")):
+            p = T((x_, z))
+            out.append(f'<text x="{p[0]:.1f}" y="{p[1]+4:.1f}" class="lev" text-anchor="{anc}">{t}</text>')
         if sc.knee_t:
             p = T((-0.05, sc.knee_z))
             out.append(f'<text x="{p[0]:.1f}" y="{p[1]+4:.1f}" class="lev" text-anchor="end">+{sc.knee_z:.2f}</text>')
@@ -142,6 +144,11 @@ th{color:var(--muted);font-weight:600}td.n,th.n{text-align:right;font-variant-nu
 """
 
 
+def _n(v, sign=False):
+    t = f"{v:+,.0f}" if sign else f"{v:,.0f}"
+    return t.replace(",", "\u202f")
+
+
 def build_html(an, sc, est, est_base, pieces, title, notes):
     m = an.model
     rows = []
@@ -159,14 +166,14 @@ def build_html(an, sc, est, est_base, pieces, title, notes):
     base_lines = {n: v for n, v, k in est_base["lines"]}
     for n, v, k in est["lines"]:
         b = base_lines.get(n, 0.0)
-        comp.append(f'<tr><td>{html.escape(n)}</td><td class="n">{b:,.0f}</td><td class="n">{v:,.0f}</td>'
-                    f'<td class="n">{v-b:+,.0f}</td></tr>'.replace(",", " "))
+        comp.append(f'<tr><td>{html.escape(n)}</td><td class="n">{_n(b)}</td><td class="n">{_n(v)}</td>'
+                    f'<td class="n">{_n(v-b, sign=True)}</td></tr>')
     comp_html = "".join(comp)
     save = est_base["total"] - est["total"]
-    kpi = (f'<div class="kpi"><div>Итог было<b>{est_base["total"]:,.0f} грн</b></div>'
-           f'<div>Итог стало<b>{est["total"]:,.0f} грн</b></div>'
-           f'<div>Экономия<b class="ok">{save:,.0f} грн</b></div>'
-           f'<div>Трубы было → стало<b>{est_base["pipes"]:,.0f} → {est["pipes"]:,.0f}</b></div></div>').replace(",", " ")
+    kpi = (f'<div class="kpi"><div>Итог было<b>{_n(est_base["total"])} грн</b></div>'
+           f'<div>Итог стало<b>{_n(est["total"])} грн</b></div>'
+           f'<div>Экономия<b class="ok">{_n(save)} грн</b></div>'
+           f'<div>Трубы, грн: было → стало<b>{_n(est_base["pipes"])} → {_n(est["pipes"])}</b></div></div>')
     notes_html = "".join(f"<li>{html.escape(n)}</li>" for n in notes)
     return f"""<!doctype html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Навес: оптимизированный каркас</title>

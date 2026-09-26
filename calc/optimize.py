@@ -121,6 +121,8 @@ def joint_capacity_util(s1, s0, jr):
     sin = jr.get("sin", 0.7)
     fy = C.RY
     beta = b1 / b0
+    if beta < 0.25:
+        return 9.0   # вне области применения EN 1993-1-8 (b1/b0 ≥ 0.25)
     eta = h1 / b0
     n0 = jr.get("n0", 0.0)
     if beta <= 0.85:
@@ -292,4 +294,11 @@ def default_groups(sc: M.Scheme, secs):
             need.add("kl")
     if sc.roof_x:
         need.add("xb")
-    return {g: by_name(secs, start[g]) for g in need}
+    out = {}
+    for g in need:
+        try:
+            out[g] = by_name(secs, start[g])
+        except KeyError:
+            ref = by_name(load_price_list(), start[g])
+            out[g] = min(secs, key=lambda s: abs(s.A - ref.A) + abs(s.h - ref.h))
+    return out

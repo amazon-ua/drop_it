@@ -134,48 +134,65 @@ class Analysis:
 
     def _solve_cases(self):
         self.case_res = {}
+        ne = len(self.model.elems)
         for name, el in self.cases.items():
             u, ends, ql = self.solver.solve(el)
-            self.case_res[name] = (u, ends, ql)
+            E_ = np.array(ends)
+            Q = np.array([q if q is not None else np.zeros(3) for q in ql])
+            self.case_res[name] = (u, E_, Q)
 
     def combine(self, coeffs):
-        n_el = len(self.model.elems)
+        ne = len(self.model.elems)
         u = np.zeros(self.model.ndof)
-        ends = [np.zeros(12) for _ in range(n_el)]
-        ql = [np.zeros(3) for _ in range(n_el)]
+        ends = np.zeros((ne, 12))
+        ql = np.zeros((ne, 3))
         for name, c in coeffs.items():
             if c == 0 or name not in self.case_res:
                 continue
             uc, ec, qc = self.case_res[name]
             u += c * uc
-            for i in range(n_el):
-                ends[i] = ends[i] + c * ec[i]
-                if qc[i] is not None:
-                    ql[i] = ql[i] + c * qc[i]
+            ends += c * ec
+            ql += c * qc
         return u, ends, ql
 
     # ---------------------------------------------------------------
     def member_forces(self, ends, ql):
-        """Для каждого проверяемого стержня: N (min/max), |My|max, |Mz|max, |V|max."""
+        """Для каждого проверяемого стержня: N (min/max), |My|max, |Mz|max, |V|max, σ max."""
         m = self.model
-        out = {}
-        for mid, mm in m.members.items():
-            Nmin, Nmax, My, Mz, Vy, Vz = 1e30, -1e30, 0.0, 0.0, 0.0, 0.0
-            smax = 0.0
-            for ei in mm["elems"]:
-                e = m.elems[ei]
-                f = member_forces_along(e, ends[ei], ql[ei], nst=5)
-                Nmin = min(Nmin, f[:, 1].min())
-                Nmax = max(Nmax, f[:, 1].max())
-                My = max(My, np.abs(f[:, 5]).max())
-                Mz = max(Mz, np.abs(f[:, 6]).max())
-                Vy = max(Vy, np.abs(f[:, 2]).max())
-                Vz = max(Vz, np.abs(f[:, 3]).max())
-                s = e.sec
-                sig = np.abs(f[:, 1]) / s.A + np.abs(f[:, 5]) / s.Wy + np.abs(f[:, 6]) / s.Wz
-                smax = max(smax, sig.max())
-            out[mid] = dict(Nmin=Nmin, Nmax=Nmax, My=My, Mz=Mz, Vy=Vy, Vz=Vz, sig=smax)
-        return out
+        if not hasattr(self, "_mf"):
+            A = np.array([e.sec.A for e in m.elems])
+            Wy = np.array([e.sec.Wy for e in m.elems])
+            Wz = np.array([e.sec.Wz for e in m.elems])
+            L = np.array([e.L for e in m.elems])
+            mem_ids = sorted(m.members)
+            pos = {mid: i for i, mid in enumerate(mem_ids)}
+            emem = np.array([pos[e.member] for e in m.elems])
+            self._mf = (A, Wy, Wz, L, mem_ids, emem)
+        A, Wy, Wz, L, mem_ids, emem = self._mf
+        st = np.linspace(0, 1, 5)[None, :] * L[:, None]           # (ne, 5)
+        f = ends
+        qx, qy, qz = ql[:, 0:1], ql[:, 1:2], ql[:, 2:3]
+        N = -(f[:, 0:1] + qx * st)
+        Vy = f[:, 1:2] + qy * st
+        Vz = f[:, 2:3] + qz * st
+        Mz = -f[:, 5:6] + f[:, 1:2] * st + qy * st * st / 2
+        My = -f[:, 4:5] - f[:, 2:3] * st - qz * st * st / 2
+        sig = np.abs(N) / A[:, None] + np.abs(My) / Wy[:, None] + np.abs(Mz) / Wz[:, None]
+        nm = len(mem_ids)
+
+        def red(arr, fn, init):
+            out = np.full(nm, init)
+            fn.at(out, emem, arr)
+            return out
+        Nmin = red(N.min(1), np.minimum, 1e30)
+        Nmax = red(N.max(1), np.maximum, -1e30)
+        Mym = red(np.abs(My).max(1), np.maximum, 0.0)
+        Mzm = red(np.abs(Mz).max(1), np.maximum, 0.0)
+        Vym = red(np.abs(Vy).max(1), np.maximum, 0.0)
+        Vzm = red(np.abs(Vz).max(1), np.maximum, 0.0)
+        sg = red(sig.max(1), np.maximum, 0.0)
+        return {mid: dict(Nmin=Nmin[i], Nmax=Nmax[i], My=Mym[i], Mz=Mzm[i], Vy=Vym[i], Vz=Vzm[i], sig=sg[i])
+                for i, mid in enumerate(mem_ids)}
 
     def effective_lengths(self, ends, forces):
         """Расчётные длины сжатых стержней из расчёта на устойчивость (энергетическое участие)."""
@@ -198,7 +215,7 @@ class Analysis:
             emem = np.array([pos[e.member] for e in m.elems])
             self._vec = (dofs, Ts, Ls, mem_ids, emem)
         dofs, Ts, Ls, mem_ids, emem = self._vec
-        Nel = np.array([-ends[i][0] for i in range(ne)])
+        Nel = -np.asarray(ends)[:, 0]
         c = Nel / (30 * Ls)
         part = []
         for lam, phi in modes:
@@ -471,6 +488,8 @@ class Analysis:
                 mode = "продавливание грани пояса" if beta <= 0.85 else "стенки пояса / раскоса"
                 if b1 > b0 + 1e-9:
                     u, mode = 9.0, "раскос шире пояса"
+                elif b1 / b0 < 0.25:
+                    mode = "b1/b0 < 0.25 — узел вне области EN 1993-1-8"
                 key = (mid, n)
                 res[key] = dict(u=u, N=Nmax, NRd=NRd, brace=mm["group"], chord=cm["group"],
                                 beta=beta, mode=mode, sin=sin, br_across=br_across, ch_face=ch_face,
@@ -500,15 +519,17 @@ class Analysis:
         for xc in (0.0, M.SPAN):
             for yc in (0.0, M.BAY):
                 n = m.add_node((xc, yc, M.Z_BASE))
+                attached = [ei for ei, e in enumerate(m.elems) if n in (e.n1, e.n2)]
                 worst = dict(u=0.0)
                 for cname, coeffs in self.uls.items():
                     u, ends, ql = self.combine(coeffs)
                     # реакция: сумма концевых сил элементов в узле
                     F = np.zeros(6)
-                    for ei, e in enumerate(m.elems):
+                    for ei in attached:
+                        e = m.elems[ei]
                         if e.n1 == n:
                             F += (e.T.T @ ends[ei])[:6]
-                        elif e.n2 == n:
+                        else:
                             F += (e.T.T @ ends[ei])[6:]
                     H = math.hypot(F[0], F[1])
                     Mb = math.hypot(F[3], F[4])

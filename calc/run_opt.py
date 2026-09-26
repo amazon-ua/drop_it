@@ -33,7 +33,7 @@ def scheme_space():
     out = []
     common = dict(knee_z=2.30, knee_dx=0.70, embed=0.70, base="spring")
     for web, knee, top, rx, zb in itertools.product(("K", "KS"), (True, False), (True, False),
-                                                    (True, False), (2.10, 2.40)):
+                                                    (True, False), (2.10,)):
         out.append(dict(frames=3, web=web, knee_t=knee, side_top=top, roof_x=rx, side_zb=zb, **common))
     for web, knee, (eb, kl), rx in itertools.product(("K", "KS"), (True, False),
                                                      ((False, False), (True, False), (True, True)),
@@ -57,15 +57,18 @@ def label(p):
     return s
 
 
+LOADS = {"all": M.Loads(), "normal": M.Loads(), "ch07": M.Loads(Ch=0.70)}
+
+
 def run_one(args):
     p, price_mode = args
-    secs = SECS_ALL if price_mode == "all" else SECS_NORMAL
+    secs = SECS_NORMAL if price_mode == "normal" else SECS_ALL
     cal = calibration()
     sc = M.Scheme(name=label(p), **p)
     sc.groups = O.default_groups(sc, secs)
     t = time.time()
     try:
-        res = O.size_scheme(sc, M.Loads(), secs, cal)
+        res = O.size_scheme(sc, LOADS[price_mode], secs, cal)
     except Exception as ex:  # noqa: BLE001
         return dict(params=p, label=label(p), price_mode=price_mode, error=repr(ex))
     if res is None:
@@ -83,6 +86,10 @@ def run_one(args):
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "all"
     space = scheme_space()
+    if mode in ("normal", "ch07"):
+        # без «спеццен» / для местности II считаем 4 лучшие схемы основного перебора
+        prev = json.loads((OUT / "opt_results_all.json").read_text())
+        space = [r["params"] for r in prev if "total" in r][:4]
     jobs = [(p, mode) for p in space]
     t0 = time.time()
     results = []
