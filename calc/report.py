@@ -15,7 +15,8 @@ import costs as K
 import model as M
 from baseline import baseline_scheme
 from drawing import build_html
-from report_data import cutting_plan, member_table, piece_list, scheme_from_result
+from report_data import (PLATES, bar_plan, cutting_plan, fab_details, member_table, piece_list,
+                         scheme_from_result)
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "output"
@@ -96,7 +97,9 @@ def main():
         "80×80×3 хлыст 5,9 м; 80×80×2,5; 100×100×2,5; 100×100×2,7) исключены.",
     ]
     title = best["label"]
-    html_text = build_html(an, sc, est, est_b, pieces, title, notes)
+    details, _ = fab_details(an.model, sc)
+    bplan = bar_plan(details)
+    html_text = build_html(an, sc, title, notes, details, bplan, PLATES, q)
     (OUT / "navis_optimized.html").write_text(html_text, encoding="utf-8")
 
     # ---------------- XLSX ----------------
@@ -154,18 +157,21 @@ def main():
         ws.cell(n + 1, col).value = f"=SUM({L}2:{L}{n})"
     ws.cell(n + 2, 1).value = f"Пластины (фасонки, крышки колонн): {q['plate_kg']:.1f} кг × {K.PLATE_PRICE:.0f} грн/кг"
 
-    rows = [[p["name"], f"□{p['sec']}", p["L"], p["n"], round(p["mass"], 1),
-             ("стык на раме: " + str(p["parts"]) + " заготовки") if p["parts"] > 1 else ""] for p in pieces]
-    sheet("Детали", ["Деталь", "Сечение", "Длина, м", "Кол-во", "Масса, кг", "Примечание"], rows,
-          [36, 16, 10, 8, 10, 30])
+    rows = [[d["name"], f"□{d['sec'].name}", d["L"], d["n"], round(d["mass"], 1), d["cuts"]] for d in details]
+    sheet("Детали", ["Заготовка", "Сечение", "Длина реза, м", "Кол-во", "Масса, кг", "Торцы"], rows,
+          [40, 14, 12, 8, 10, 70])
 
     rows = []
-    for secname, bars in plan.items():
-        for i, b in enumerate(bars, 1):
+    for secname, p in bplan.items():
+        for i, b in enumerate(p["bars"], 1):
             rows.append([f"□{secname}", i, " + ".join(f"{L:.3f}" for L, _ in b["cuts"]),
                          "; ".join(sorted(set(nm for _, nm in b["cuts"]))), round(b["free"], 3)])
-    sheet("Раскрой (хлыст 6 м)", ["Профиль", "Хлыст №", "Резы, м", "Детали", "Остаток, м"], rows,
-          [16, 8, 40, 50, 10])
+    sheet("Раскрой (хлыст 6 м)", ["Профиль", "Хлыст №", "Резы, м", "Заготовки", "Остаток, м"], rows,
+          [14, 8, 44, 60, 10])
+
+    rows = [[nm, size, t if t else "—", n, round(mass * n, 2), where, src] for nm, size, t, n, mass, where, src in PLATES]
+    sheet("Пластины", ["Позиция", "Размер, мм", "t, мм", "Кол-во", "Масса, кг", "Где", "Из чего резать"], rows,
+          [32, 22, 8, 8, 10, 30, 60])
 
     rows = [[r["name"], f"□{r['sec']}", round(r["Nc"], 2), round(r["Nt"], 2), round(r["M"], 3),
              round(r["u"], 3), r["gov"]] for r in mt]
@@ -234,9 +240,10 @@ def main():
       f"{max(r['Vcomp'] for r in an.found_results.values())/1e3/0.09:.0f} кПа (без учёта трения по боковой поверхности) — "
       "для суглинка тугопластичного допустимо; при слабом грунте (насыпь, текучий суглинок) расширить низ лунки.\n")
     w("### Ведомость деталей\n")
-    w("| Деталь | Сечение | Длина, м | Кол-во | Масса, кг |\n|---|---|---:|---:|---:|")
-    for p in pieces:
-        w(f"| {p['name']} | □{p['sec']} | {p['L']:.3f} | {p['n']} | {p['mass']:.1f} |")
+    w("Длины реза — в чистоте по узлам; раскрой на хлысты — в `output/navis_optimized.html` и в xlsx.\n")
+    w("| Заготовка | Сечение | Длина реза, м | Кол-во | Масса, кг | Торцы |\n|---|---|---:|---:|---:|---|")
+    for d in details:
+        w(f"| {d['name']} | □{d['sec'].name} | {d['L']:.3f} | {d['n']} | {d['mass']:.1f} | {d['cuts']} |")
     w("\n### Металл по профилям\n")
     w("| Профиль | Длина, м | Масса, кг | Цена, грн/м | Сумма, грн |\n|---|---:|---:|---:|---:|")
     for name, d in sorted(est["by_sec"].items(), key=lambda kv: -kv[1]["cost"]):
@@ -310,10 +317,10 @@ def main():
           "(Λ-образные: два раскоса от колонн с отметки +2.10 и нижний пояс-затяжка +2.10 между колоннами"
           + ("; поверху — обвязка между оголовками колонн" if sc.side_top else "") + "). Все элементы — "
           "в плоскостях рядов колонн, вне коридора проезда.")
-        w("- **Обрешётка** — неразрезная по трём стропилам, стык заготовок (6 м + 0.98 м) — над крайней рамой.")
+        w("- **Обрешётка** — неразрезная по трём стропилам, из двух заготовок 5.78 + 1.20 м со стыком над стропилом рамы 3.")
     else:
         w("- **Две рамы** — только по колоннам; обрешётка перекрывает 4.60 м между ними и консоли 1.2 м, "
-          "стык заготовок (6 м + 0.98 м) — над рамой."
+          "стык заготовок (5.78 + 1.20 м) — над рамой."
           + (" Продольная обвязка по оголовкам колонн" + (" с подкосами" if sc.knee_l else "") + " — в плоскостях рядов колонн."
              if sc.eave_beam else ""))
     if sc.frames == 3:

@@ -162,36 +162,115 @@ def _n(v, sign=False):
     return t.replace(",", "\u202f")
 
 
-def build_html(an, sc, est, est_base, pieces, title, notes):
-    m = an.model
-    rows = []
+def _bar_svg(cuts, free, stock, colors):
+    """Полоса хлыста: заготовки + остаток."""
+    W, H = 720, 34
+    sx = W / stock
+    out = [f'<svg viewBox="0 0 {W + 2} {H + 2}" class="bar" role="img" aria-label="раскроенный хлыст">']
+    x = 1
+    for L, nm, g in cuts:
+        w = L * sx
+        out.append(f'<rect x="{x:.1f}" y="1" width="{w:.1f}" height="{H}" fill="{colors.get(g, "#888")}" '
+                   f'fill-opacity="0.85" stroke="#0007" stroke-width="0.8"/>')
+        if w > 34:
+            out.append(f'<text x="{x + w / 2:.1f}" y="{H / 2 + 6:.1f}" class="bt" text-anchor="middle">{L:.3f}</text>')
+        x += w + 0.003 * sx
+    if free > 1e-3:
+        w = free * sx
+        out.append(f'<rect x="{x:.1f}" y="1" width="{max(w - 1, 0):.1f}" height="{H}" fill="url(#hatch)" '
+                   f'stroke="#0005" stroke-width="0.8"/>')
+        if w > 40:
+            out.append(f'<text x="{x + w / 2:.1f}" y="{H / 2 + 6:.1f}" class="bt2" text-anchor="middle">ост. {free:.2f}</text>')
+    out.append("</svg>")
+    return "".join(out)
+
+
+HATCH = ('<svg width="0" height="0" style="position:absolute"><defs><pattern id="hatch" width="6" height="6" '
+         'patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--card)"/>'
+         '<line x1="0" y1="0" x2="0" y2="6" stroke="var(--dim)" stroke-width="1.2"/></pattern></defs></svg>')
+
+
+def build_html(an, sc, title, notes, details, plan, plates, q):
     from report_data import member_table
+    import model as _M
+    m = an.model
     mt = member_table(an)
     legend = "".join(
         f'<tr><td><span class="sw" style="background:{COLORS.get(r["group"], "#555")}"></span>{html.escape(r["name"])}</td>'
         f'<td>□{html.escape(r["sec"])}</td><td class="n">{r["Nc"]:.1f}</td><td class="n">{r["Nt"]:.1f}</td>'
         f'<td class="n">{r["M"]:.2f}</td><td class="n">{r["u"]:.2f}</td><td class="note">{html.escape(r["gov"])}</td></tr>'
         for r in mt)
+    drow = "".join(
+        f'<tr><td><span class="sw" style="background:{COLORS.get(d["group"], "#555")}"></span>{html.escape(d["name"])}</td>'
+        f'<td>□{html.escape(d["sec"].name)}</td><td class="n">{d["L"]:.3f}</td><td class="n">{d["n"]}</td>'
+        f'<td class="n">{d["mass"]:.1f}</td><td class="note">{html.escape(d["cuts"])}</td></tr>' for d in details)
+    grp_of = {d["name"]: d["group"] for d in details}
+    # раскрой
+    blocks = []
+    tot_bars = 0
+    tot_need = 0.0
+    tot_buy = 0.0
+    srow = []
+    for sn, p in sorted(plan.items(), key=lambda kv: -kv[1]["need"] * kv[1]["sec"].price):
+        bars = p["bars"]
+        need = p["need"]
+        short = len(bars) == 1 and need < 1.0
+        # одинаковые хлысты группируем
+        pat = {}
+        for b in bars:
+            key = tuple((round(L, 3), nm) for L, nm in b["cuts"])
+            pat.setdefault(key, [0, b["free"]])
+            pat[key][0] += 1
+        rows_html = []
+        for key, (cnt, free) in pat.items():
+            cuts = [(L, nm, grp_of.get(nm, "")) for L, nm in key]
+            names = {}
+            for L, nm, g in cuts:
+                names[(nm, L)] = names.get((nm, L), 0) + 1
+            desc = "; ".join(f"{nm} {L:.3f}" + (f" × {k}" if k > 1 else "") for (nm, L), k in names.items())
+            if short:
+                rows_html.append(f'<div class="bl"><div class="bh">покупать отрезком ≈ {need + 0.02:.2f} м '
+                                 f'(хлыст не нужен)</div><div class="bd">{html.escape(desc)}</div></div>')
+            else:
+                rows_html.append(f'<div class="bl"><div class="bh"><b>× {cnt}</b> хлыст{"" if cnt == 1 else "а" if cnt < 5 else "ов"}'
+                                 f'</div>{_bar_svg(cuts, free, 6.0, COLORS)}<div class="bd">{html.escape(desc)}</div></div>')
+        nb = 0 if short else len(bars)
+        buy = need + 0.02 if short else nb * 6.0
+        tot_bars += nb
+        tot_need += need
+        tot_buy += buy
+        srow.append(f'<tr><td>□{html.escape(sn)}</td><td class="n">{need:.2f}</td>'
+                    f'<td class="n">{"—" if short else nb}</td><td class="n">{buy:.2f}</td>'
+                    f'<td class="n">{(buy - need):.2f}</td><td class="n">{p["sec"].mass * need:.1f}</td></tr>')
+        blocks.append(f'<h3>□{html.escape(sn)} — {need:.2f} м деталей, '
+                      + ("отрезком" if short else f"{nb} хлыст{'а' if 1 < nb < 5 else '' if nb == 1 else 'ов'} по 6 м")
+                      + "</h3>" + "".join(rows_html))
+    srow.append(f'<tr><td><b>Итого</b></td><td class="n"><b>{tot_need:.2f}</b></td><td class="n"><b>{tot_bars}</b></td>'
+                f'<td class="n"><b>{tot_buy:.2f}</b></td><td class="n"><b>{tot_buy - tot_need:.2f}</b></td>'
+                f'<td class="n"><b>{sum(d["mass"] for d in details):.1f}</b></td></tr>')
     prow = "".join(
-        f'<tr><td>{html.escape(p["name"])}</td><td>□{html.escape(p["sec"])}</td><td class="n">{p["L"]:.3f}</td>'
-        f'<td class="n">{p["n"]}</td><td class="n">{p["mass"]:.1f}</td></tr>' for p in pieces)
-    comp = []
-    base_lines = {n: v for n, v, k in est_base["lines"]}
-    for n, v, k in est["lines"]:
-        b = base_lines.get(n, 0.0)
-        comp.append(f'<tr><td>{html.escape(n)}</td><td class="n">{_n(b)}</td><td class="n">{_n(v)}</td>'
-                    f'<td class="n">{_n(v-b, sign=True)}</td></tr>')
-    comp_html = "".join(comp)
-    save = est_base["total"] - est["total"]
-    kpi = (f'<div class="kpi"><div>Итог было<b>{_n(est_base["total"])} грн</b></div>'
-           f'<div>Итог стало<b>{_n(est["total"])} грн</b></div>'
-           f'<div>Экономия<b class="ok">{_n(save)} грн</b></div>'
-           f'<div>Трубы, грн: было → стало<b>{_n(est_base["pipes"])} → {_n(est["pipes"])}</b></div></div>')
+        f'<tr><td>{html.escape(nm)}</td><td>{html.escape(size)}</td><td class="n">{t if t else "—"}</td>'
+        f'<td class="n">{n}</td><td class="n">{mass * n:.1f}</td><td class="note">{html.escape(where)}</td>'
+        f'<td class="note">{html.escape(src)}</td></tr>'
+        for nm, size, t, n, mass, where, src in plates)
+    plate_kg = sum(mass * n for _, _, _, n, mass, _, _ in plates)
+    tube_kg = sum(d["mass"] for d in details)
+    kpi = (f'<div class="kpi"><div>Металл труб<b>{tube_kg:.0f} кг</b></div>'
+           f'<div>Пластины<b>{plate_kg:.0f} кг</b></div>'
+           f'<div>Трубы: детали / закупка<b>{tot_need:.0f} / {tot_buy:.0f} м</b></div>'
+           f'<div>Хлыстов по 6 м<b>{tot_bars}</b></div></div>')
     notes_html = "".join(f"<li>{html.escape(n)}</li>" for n in notes)
+    extra_css = """
+svg.bar{width:100%;max-width:760px;height:auto;display:block;margin:4px 0}
+.bt{fill:#fff;font-size:13px;font-weight:600;font-family:system-ui,sans-serif}
+.bt2{fill:var(--dim);font-size:12px;font-family:system-ui,sans-serif}
+.bl{margin:8px 0 12px}.bh{font-size:14px}.bd{color:var(--muted);font-size:13px}
+h3{font-size:15px;margin:18px 0 4px}
+"""
     return f"""<!doctype html><html lang="ru"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Навес: оптимизированный каркас</title>
-<style>{CSS}</style></head><body><main>
-<h1>Навес 5.45 × 4.60 м (кровля 6.75 × 6.98 м): оптимизированный каркас</h1>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Навес: каркас и раскрой</title>
+<style>{CSS}{extra_css}</style></head><body>{HATCH}<main>
+<h1>Навес 5.45 × 4.60 м (кровля 6.75 × 6.98 м): каркас, заготовки, раскрой</h1>
 <p class="sub">{html.escape(title)}</p>
 {kpi}
 <h2>Вид А — рама (фасад со стороны дороги)</h2><div class="card">{_svg_view(m, sc, "front")}</div>
@@ -200,9 +279,22 @@ def build_html(an, sc, est, est_base, pieces, title, notes):
 <h2>Сечения и проверки</h2><div class="card"><table><thead><tr><th>Элемент</th><th>Сечение</th>
 <th class="n">N сж, кН</th><th class="n">N раст, кН</th><th class="n">M, кН·м</th><th class="n">Исп.</th><th>Определяющая проверка</th></tr></thead>
 <tbody>{legend}</tbody></table></div>
-<h2>Ведомость деталей</h2><div class="card"><table><thead><tr><th>Деталь</th><th>Сечение</th><th class="n">Длина, м</th>
-<th class="n">Кол-во</th><th class="n">Масса, кг</th></tr></thead><tbody>{prow}</tbody></table></div>
-<h2>Смета: было → стало</h2><div class="card"><table><thead><tr><th>Статья</th><th class="n">Было, грн</th>
-<th class="n">Стало, грн</th><th class="n">Δ, грн</th></tr></thead><tbody>{comp_html}</tbody></table></div>
+<h2>Заготовки (длины реза)</h2>
+<p class="note">Длины — в чистоте, по узлам (см. чертежи узлов): затяжки между гранями колонн/стоек, раскосы — от грани колонны
+до фасонки, подвески и подкосы — между затяжкой и стропилом. Длины колонн — с заделкой в бетон; стропил — по оси.
+Подкосы и подвески лучше окончательно подогнать по месту на стенде.</p>
+<div class="card"><table><thead><tr><th>Заготовка</th><th>Сечение</th><th class="n">Длина, м</th><th class="n">Кол-во</th>
+<th class="n">Масса, кг</th><th>Торцы</th></tr></thead><tbody>{drow}</tbody></table></div>
+<h2>Раскрой труб на хлысты 6 м</h2>
+<p class="note">Пропил 3 мм. Обрешётина 6.98 м длиннее хлыста — режется на 5.78 м (от края до рамы 3) и 1.20 м (консоль),
+стык сваривается над стропилом рамы 3. Если магазин продаёт по метражу с резкой, остатки не покупаются — тогда
+закупка равна длине деталей.</p>
+<div class="card"><table><thead><tr><th>Профиль</th><th class="n">Детали, м</th><th class="n">Хлыстов</th>
+<th class="n">Закупка, м</th><th class="n">Остатки, м</th><th class="n">Масса деталей, кг</th></tr></thead>
+<tbody>{"".join(srow)}</tbody></table></div>
+<div class="card">{"".join(blocks)}</div>
+<h2>Пластины, заглушки</h2><div class="card"><table><thead><tr><th>Позиция</th><th>Размер, мм</th><th class="n">t, мм</th>
+<th class="n">Кол-во</th><th class="n">Масса, кг</th><th>Где</th><th>Из чего резать</th></tr></thead><tbody>{prow}</tbody></table>
+<p class="note">Размеры и сварка фасонок и пластин — на чертежах узлов (uzly.html). Хомуты Ø8 в лунках (по 3 шт.) — по черновику.</p></div>
 <h2>Примечания</h2><ul>{notes_html}</ul>
 </main></body></html>"""
