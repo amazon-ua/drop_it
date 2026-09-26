@@ -18,7 +18,8 @@ import numpy as np
 
 import model as M
 
-STOCK_LEN = 6.0        # длина хлыста, м (продажа по метражу, но заготовки не длиннее хлыста)
+STOCK_LEN = 12.0       # наибольшая заготовка без стыка, м (хлысты 12 м: обрешётина 6.98 м — цельная)
+BAR_LENGTHS = (6.0, 12.0)   # длины хлыстов в продаже
 CUT_ALLOW = 0.003      # пропил на рез, м
 PLATE_PRICE = 55.0     # грн/кг (лист t=4…8; по черновику 9 кг ≈ 500 грн)
 
@@ -48,8 +49,11 @@ ESTIMATE_TOTAL = 239730   # итог сметы xlsx (материалы 162 730
 ESTIMATE_PIPES = 80460    # трубы по смете xlsx (24 м 100×100×5 + 90 м 60×40×3 + 228 м 40×40×2)
 
 
-def quantities(model, sc):
-    """Детали, длины, массы, площади, швы — по модели."""
+def quantities(model, sc, stock_len=None):
+    """Детали, длины, массы, площади, швы — по модели.
+
+    stock_len — наибольшая заготовка без стыка (12 м — хлысты 12 м, 6 м — как в черновике)."""
+    stock_len = stock_len or STOCK_LEN
     m = model
     piece_len = defaultdict(float)
     piece_sec = {}
@@ -102,7 +106,7 @@ def quantities(model, sc):
     # стыки обрешётки и других длинных деталей (заготовка ≤ 6 м)
     n_splice = 0
     for p in pieces:
-        k = max(1, math.ceil(p["L"] / STOCK_LEN - 1e-9))
+        k = max(1, math.ceil(p["L"] / stock_len - 1e-9))
         p["parts"] = k
         if k > 1:
             n_splice += k - 1

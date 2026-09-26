@@ -111,7 +111,7 @@ def member_table(an):
 # ---------------------------------------------------------------------------
 # Заготовки для изготовления: фактические длины реза и торцевые резы
 # ---------------------------------------------------------------------------
-def fab_details(model, sc):
+def fab_details(model, sc, lath_split=False):
     """Список заготовок: name, group, sec, L (длина реза, м), n, cuts (описание торцов).
 
     Длины — «в чистоте» по узлам из output/uzly.html (затяжка между гранями колонн, раскос — от грани
@@ -170,10 +170,13 @@ def fab_details(model, sc):
                 f"оба торца — вертикальные резы ({90 - _m.degrees(a):.1f}° к оси)")
         elif grp == "sb":
             add("Нижний пояс боковой фермы", grp, sec, L - col.b, 1, "оба торца — прямые, между гранями колонн")
-        elif grp == "lath":
+        elif grp == "lath" and lath_split:
             add("Обрешётина, часть 1 (край → рама 3)", grp, sec, M.BAY - M.Y_MIN, 1,
                 "торцы прямые; стык с частью 2 — над стропилом рамы 3")
             add("Обрешётина, часть 2 (рама 3 → край)", grp, sec, M.Y_MAX - M.BAY, 1, "торцы прямые")
+        elif grp == "lath":
+            add("Обрешётина цельная", grp, sec, M.Y_MAX - M.Y_MIN, 1,
+                "торцы прямые; из хлыста 12 м, без стыка")
         else:
             add(M.GROUP_INFO[grp][0], grp, sec, L, 1, "")
     order = list(M.GROUP_INFO)
@@ -183,8 +186,38 @@ def fab_details(model, sc):
     return out, q
 
 
-def bar_plan(details, stock=K.STOCK_LEN, kerf=K.CUT_ALLOW):
-    """Раскрой на хлысты (первый подходящий по убыванию длины) по каждому сечению."""
+def _pack(items, k12, stocks, kerf):
+    """Лучший подходящий (best fit) по убыванию: первые k12 новых хлыстов — 12 м, далее 6 м
+    (деталь длиннее короткого хлыста всегда идёт в длинный)."""
+    short, long_ = min(stocks), max(stocks)
+    bars = []
+    n12 = 0
+    for L, nm in items:
+        best = None
+        for b in bars:
+            if b["free"] >= L + kerf - 1e-9 and (best is None or b["free"] < best["free"]):
+                best = b
+        if best is None:
+            use_long = (L + kerf > short + 1e-9) or n12 < k12
+            st = long_ if use_long else short
+            if L + kerf > st + 1e-9:
+                return None
+            n12 += use_long
+            best = dict(cuts=[], free=st, stock=st)
+            bars.append(best)
+        best["cuts"].append((L, nm))
+        best["free"] -= L + kerf
+    # длинный хлыст, заполненный не больше короткого, — заменить на короткий
+    for b in bars:
+        used = b["stock"] - b["free"]
+        if b["stock"] == long_ and used <= short + 1e-9:
+            b["stock"], b["free"] = short, short - used
+    return bars
+
+
+def bar_plan(details, stocks=None, kerf=K.CUT_ALLOW):
+    """Раскрой на хлысты 6 и 12 м: по каждому сечению — сочетание с наименьшей длиной закупки."""
+    stocks = stocks or K.BAR_LENGTHS
     by_sec = defaultdict(list)
     secs = {}
     for d in details:
@@ -194,18 +227,16 @@ def bar_plan(details, stock=K.STOCK_LEN, kerf=K.CUT_ALLOW):
     plan = {}
     for sn, items in by_sec.items():
         items.sort(key=lambda t: -t[0])
-        bars = []
-        for L, nm in items:
-            best = None
-            for b in bars:
-                if b["free"] >= L + kerf - 1e-9 and (best is None or b["free"] < best["free"]):
-                    best = b
-            if best is None:
-                best = dict(cuts=[], free=stock)
-                bars.append(best)
-            best["cuts"].append((L, nm))
-            best["free"] -= L + kerf
-        plan[sn] = dict(sec=secs[sn], bars=bars, need=sum(L for L, _ in items))
+        best = None
+        for k12 in range(len(items) + 1):
+            bars = _pack(items, k12, stocks, kerf)
+            if bars is None:
+                continue
+            key = (sum(b["stock"] for b in bars), len(bars))
+            if best is None or key < best[0]:
+                best = (key, bars)
+        plan[sn] = dict(sec=secs[sn], bars=best[1], need=sum(L for L, _ in items),
+                        buy=best[0][0])
     return plan
 
 

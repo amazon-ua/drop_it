@@ -90,7 +90,7 @@ def main():
     sc = scheme_from_result(r)
     base = baseline_scheme()
     an_b = C.Analysis(base, M.Loads()).run_all()
-    cal = K.Calibration(K.quantities(an_b.model, base))
+    cal = K.Calibration(K.quantities(an_b.model, base, stock_len=6.0))
     out = {}
     for tag, L in (("Ch0.40", M.Loads()), ("Ch0.70", M.Loads(Ch=0.70))):
         an = C.Analysis(sc, L).run_all()

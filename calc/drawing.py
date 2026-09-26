@@ -162,18 +162,19 @@ def _n(v, sign=False):
     return t.replace(",", "\u202f")
 
 
-def _bar_svg(cuts, free, stock, colors):
-    """Полоса хлыста: заготовки + остаток."""
+def _bar_svg(cuts, free, stock, colors, scale_len=12.0):
+    """Полоса хлыста: заготовки + остаток (масштаб — по 12 м, хлыст 6 м вдвое короче)."""
     W, H = 720, 34
-    sx = W / stock
-    out = [f'<svg viewBox="0 0 {W + 2} {H + 2}" class="bar" role="img" aria-label="раскроенный хлыст">']
+    sx = W / scale_len
+    out = [f'<svg viewBox="0 0 {W + 2} {H + 2}" class="bar" role="img" aria-label="раскроенный хлыст">',
+           f'<rect x="1" y="1" width="{stock * sx:.1f}" height="{H}" fill="none" stroke="#0007"/>']
     x = 1
     for L, nm, g in cuts:
         w = L * sx
         out.append(f'<rect x="{x:.1f}" y="1" width="{w:.1f}" height="{H}" fill="{colors.get(g, "#888")}" '
                    f'fill-opacity="0.85" stroke="#0007" stroke-width="0.8"/>')
-        if w > 34:
-            out.append(f'<text x="{x + w / 2:.1f}" y="{H / 2 + 6:.1f}" class="bt" text-anchor="middle">{L:.3f}</text>')
+        if w > 30:
+            out.append(f'<text x="{x + w / 2:.1f}" y="{H / 2 + 6:.1f}" class="bt" text-anchor="middle">{L:.2f}</text>')
         x += w + 0.003 * sx
     if free > 1e-3:
         w = free * sx
@@ -190,7 +191,7 @@ HATCH = ('<svg width="0" height="0" style="position:absolute"><defs><pattern id=
          '<line x1="0" y1="0" x2="0" y2="6" stroke="var(--dim)" stroke-width="1.2"/></pattern></defs></svg>')
 
 
-def build_html(an, sc, title, notes, details, plan, plates, q):
+def build_html(an, sc, title, notes, details, plan, plates, q, details_split=None):
     from report_data import member_table
     import model as _M
     m = an.model
@@ -204,50 +205,57 @@ def build_html(an, sc, title, notes, details, plan, plates, q):
         f'<tr><td><span class="sw" style="background:{COLORS.get(d["group"], "#555")}"></span>{html.escape(d["name"])}</td>'
         f'<td>□{html.escape(d["sec"].name)}</td><td class="n">{d["L"]:.3f}</td><td class="n">{d["n"]}</td>'
         f'<td class="n">{d["mass"]:.1f}</td><td class="note">{html.escape(d["cuts"])}</td></tr>' for d in details)
-    grp_of = {d["name"]: d["group"] for d in details}
-    # раскрой
+    grp_of = {d["name"]: d["group"] for d in list(details) + list(details_split or [])}
+    need_by_sec = {}
+    for d in details:
+        need_by_sec[d["sec"].name] = need_by_sec.get(d["sec"].name, 0.0) + d["L"] * d["n"]
     blocks = []
-    tot_bars = 0
-    tot_need = 0.0
-    tot_buy = 0.0
     srow = []
+    tot_need = tot_buy = 0.0
+    n6 = n12 = 0
     for sn, p in sorted(plan.items(), key=lambda kv: -kv[1]["need"] * kv[1]["sec"].price):
         bars = p["bars"]
-        need = p["need"]
-        short = len(bars) == 1 and need < 1.0
-        # одинаковые хлысты группируем
+        need_m = need_by_sec.get(sn, p["need"])
+        short = p["need"] < 1.0
         pat = {}
         for b in bars:
-            key = tuple((round(L, 3), nm) for L, nm in b["cuts"])
+            key = (b["stock"],) + tuple((round(L, 3), nm) for L, nm in b["cuts"])
             pat.setdefault(key, [0, b["free"]])
             pat[key][0] += 1
         rows_html = []
-        for key, (cnt, free) in pat.items():
-            cuts = [(L, nm, grp_of.get(nm, "")) for L, nm in key]
+        c6 = sum(1 for b in bars if b["stock"] < 7)
+        c12 = len(bars) - c6
+        for key, (cnt, free) in sorted(pat.items(), key=lambda kv: -kv[0][0]):
+            stock = key[0]
+            cuts = [(L, nm, grp_of.get(nm, "")) for L, nm in key[1:]]
             names = {}
             for L, nm, g in cuts:
                 names[(nm, L)] = names.get((nm, L), 0) + 1
             desc = "; ".join(f"{nm} {L:.3f}" + (f" × {k}" if k > 1 else "") for (nm, L), k in names.items())
             if short:
-                rows_html.append(f'<div class="bl"><div class="bh">покупать отрезком ≈ {need + 0.02:.2f} м '
+                rows_html.append(f'<div class="bl"><div class="bh">покупать отрезком ≈ {p["need"] + 0.02:.2f} м '
                                  f'(хлыст не нужен)</div><div class="bd">{html.escape(desc)}</div></div>')
             else:
-                rows_html.append(f'<div class="bl"><div class="bh"><b>× {cnt}</b> хлыст{"" if cnt == 1 else "а" if cnt < 5 else "ов"}'
-                                 f'</div>{_bar_svg(cuts, free, 6.0, COLORS)}<div class="bd">{html.escape(desc)}</div></div>')
-        nb = 0 if short else len(bars)
-        buy = need + 0.02 if short else nb * 6.0
-        tot_bars += nb
-        tot_need += need
+                word = "хлыст" if cnt == 1 else "хлыста" if cnt < 5 else "хлыстов"
+                rows_html.append(f'<div class="bl"><div class="bh"><b>× {cnt}</b> {word} {stock:.0f} м</div>'
+                                 f'{_bar_svg(cuts, free, stock, COLORS)}<div class="bd">{html.escape(desc)}</div></div>')
+        buy = p["need"] + 0.02 if short else p["buy"]
+        if not short:
+            n6 += c6
+            n12 += c12
+        tot_need += need_m
         tot_buy += buy
-        srow.append(f'<tr><td>□{html.escape(sn)}</td><td class="n">{need:.2f}</td>'
-                    f'<td class="n">{"—" if short else nb}</td><td class="n">{buy:.2f}</td>'
-                    f'<td class="n">{(buy - need):.2f}</td><td class="n">{p["sec"].mass * need:.1f}</td></tr>')
-        blocks.append(f'<h3>□{html.escape(sn)} — {need:.2f} м деталей, '
-                      + ("отрезком" if short else f"{nb} хлыст{'а' if 1 < nb < 5 else '' if nb == 1 else 'ов'} по 6 м")
-                      + "</h3>" + "".join(rows_html))
-    srow.append(f'<tr><td><b>Итого</b></td><td class="n"><b>{tot_need:.2f}</b></td><td class="n"><b>{tot_bars}</b></td>'
-                f'<td class="n"><b>{tot_buy:.2f}</b></td><td class="n"><b>{tot_buy - tot_need:.2f}</b></td>'
-                f'<td class="n"><b>{sum(d["mass"] for d in details):.1f}</b></td></tr>')
+        bars_txt = "отрезок" if short else " + ".join(t for t in (f"{c12}×12 м" if c12 else "", f"{c6}×6 м" if c6 else "") if t)
+        srow.append(f'<tr><td>□{html.escape(sn)}</td><td class="n">{need_m:.2f}</td>'
+                    f'<td class="n">{need_m * p["sec"].price:,.0f}</td>'.replace(",", "\u202f")
+                    + f'<td>{bars_txt}</td><td class="n">{buy:.2f}</td>'
+                    f'<td class="n">{buy * p["sec"].price:,.0f}</td></tr>'.replace(",", "\u202f"))
+        blocks.append(f'<h3>□{html.escape(sn)} — {bars_txt}</h3>' + "".join(rows_html))
+    cost_m = sum(d["L"] * d["n"] * d["sec"].price for d in details)
+    cost_b = sum((p["need"] + 0.02 if p["need"] < 1 else p["buy"]) * p["sec"].price for p in plan.values())
+    srow.append(f'<tr><td><b>Итого</b></td><td class="n"><b>{tot_need:.2f}</b></td><td class="n"><b>{_n(cost_m)}</b></td>'
+                f'<td><b>{n12}×12 + {n6}×6</b></td><td class="n"><b>{tot_buy:.2f}</b></td>'
+                f'<td class="n"><b>{_n(cost_b)}</b></td></tr>')
     prow = "".join(
         f'<tr><td>{html.escape(nm)}</td><td>{html.escape(size)}</td><td class="n">{t if t else "—"}</td>'
         f'<td class="n">{n}</td><td class="n">{mass * n:.1f}</td><td class="note">{html.escape(where)}</td>'
@@ -257,8 +265,8 @@ def build_html(an, sc, title, notes, details, plan, plates, q):
     tube_kg = sum(d["mass"] for d in details)
     kpi = (f'<div class="kpi"><div>Металл труб<b>{tube_kg:.0f} кг</b></div>'
            f'<div>Пластины<b>{plate_kg:.0f} кг</b></div>'
-           f'<div>Трубы: детали / закупка<b>{tot_need:.0f} / {tot_buy:.0f} м</b></div>'
-           f'<div>Хлыстов по 6 м<b>{tot_bars}</b></div></div>')
+           f'<div>Трубы по метражу<b>{tot_need:.0f} м</b></div>'
+           f'<div>Или целыми хлыстами<b>{n12}×12 + {n6}×6 м</b></div></div>')
     notes_html = "".join(f"<li>{html.escape(n)}</li>" for n in notes)
     extra_css = """
 svg.bar{width:100%;max-width:760px;height:auto;display:block;margin:4px 0}
@@ -285,13 +293,15 @@ h3{font-size:15px;margin:18px 0 4px}
 Подкосы и подвески лучше окончательно подогнать по месту на стенде.</p>
 <div class="card"><table><thead><tr><th>Заготовка</th><th>Сечение</th><th class="n">Длина, м</th><th class="n">Кол-во</th>
 <th class="n">Масса, кг</th><th>Торцы</th></tr></thead><tbody>{drow}</tbody></table></div>
-<h2>Раскрой труб на хлысты 6 м</h2>
-<p class="note">Пропил 3 мм. Обрешётина 6.98 м длиннее хлыста — режется на 5.78 м (от края до рамы 3) и 1.20 м (консоль),
-стык сваривается над стропилом рамы 3. Если магазин продаёт по метражу с резкой, остатки не покупаются — тогда
-закупка равна длине деталей.</p>
-<div class="card"><table><thead><tr><th>Профиль</th><th class="n">Детали, м</th><th class="n">Хлыстов</th>
-<th class="n">Закупка, м</th><th class="n">Остатки, м</th><th class="n">Масса деталей, кг</th></tr></thead>
+<h2>Закупка и раскрой труб (хлысты 6 и 12 м)</h2>
+<p class="note"><b>Рекомендуется покупать по метражу с резкой в магазине</b>: платите только за длину деталей, обрешётины
+6.98 м режутся из хлыстов 12 м целиком — без стыков. Если магазин продаёт только целыми хлыстами — ниже раскрой
+с наименьшей закупкой (сочетание хлыстов 6 и 12 м по каждому профилю); в этом случае обрешётину выгоднее резать
+на 5.78 + 1.20 м со стыком над стропилом рамы 3 (закупка 174 м вместо 264 м). Пропил 3 мм. Суммы — по прайсу, для сравнения способов.</p>
+<div class="card"><table><thead><tr><th>Профиль</th><th class="n">По метражу, м</th><th class="n">По метражу, грн</th>
+<th>Целыми хлыстами</th><th class="n">Хлыстов, м</th><th class="n">Хлыстами, грн</th></tr></thead>
 <tbody>{"".join(srow)}</tbody></table></div>
+<h3>Раскрой при покупке целыми хлыстами</h3>
 <div class="card">{"".join(blocks)}</div>
 <h2>Пластины, заглушки</h2><div class="card"><table><thead><tr><th>Позиция</th><th>Размер, мм</th><th class="n">t, мм</th>
 <th class="n">Кол-во</th><th class="n">Масса, кг</th><th>Где</th><th>Из чего резать</th></tr></thead><tbody>{prow}</tbody></table>
