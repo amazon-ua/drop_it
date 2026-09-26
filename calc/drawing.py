@@ -310,6 +310,14 @@ svg.bar{width:100%;max-width:760px;height:auto;display:block;margin:4px 0}
 .bl{margin:8px 0 12px}.bh{font-size:14px}.bd{color:var(--muted);font-size:13px}
 h3{font-size:15px;margin:18px 0 4px}
 .tn{fill:#1e293b;font-size:26px;font-weight:700;font-family:system-ui,sans-serif}
+@media print{
+  body{background:#fff}
+  main{max-width:none;padding:0}
+  .card{break-inside:avoid;page-break-inside:avoid}
+  .card.long{break-inside:auto;page-break-inside:auto}
+  .bl,tr,svg{break-inside:avoid;page-break-inside:avoid}
+  h2,h3{break-after:avoid;page-break-after:avoid}
+}
 """
     return f"""<!doctype html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Навес: каркас и раскрой</title>
@@ -327,7 +335,7 @@ h3{font-size:15px;margin:18px 0 4px}
 <p class="note">Длины — в чистоте, по узлам (см. чертежи узлов): затяжки между гранями колонн/стоек, раскосы — от грани колонны
 до фасонки, подвески и подкосы — между затяжкой и стропилом. Длины колонн — с заделкой в бетон; стропил — по оси.
 Подкосы и подвески лучше окончательно подогнать по месту на стенде.</p>
-<div class="card"><table><thead><tr><th>Заготовка</th><th>Сечение</th><th class="n">Длина, м</th><th class="n">Кол-во</th>
+<div class="card long"><table><thead><tr><th>Заготовка</th><th>Сечение</th><th class="n">Длина, м</th><th class="n">Кол-во</th>
 <th class="n">Масса, кг</th><th>Торцы</th></tr></thead><tbody>{drow}</tbody></table></div>
 <h2>Закупка и раскрой труб (хлысты 6 и 12 м)</h2>
 <p class="note"><b>Рекомендуется покупать по метражу с резкой в магазине</b>: платите только за длину деталей, обрешётины
@@ -338,7 +346,7 @@ h3{font-size:15px;margin:18px 0 4px}
 <th>Целыми хлыстами</th><th class="n">Хлыстов, м</th><th class="n">Хлыстами, грн</th></tr></thead>
 <tbody>{"".join(srow)}</tbody></table></div>
 <h3>Раскрой при покупке целыми хлыстами</h3>
-<div class="card">{"".join(blocks)}</div>
+<div class="card long">{"".join(blocks)}</div>
 <h2>Пластины, заглушки</h2><div class="card"><table><thead><tr><th>Позиция</th><th>Размер, мм</th><th class="n">t, мм</th>
 <th class="n">Кол-во</th><th class="n">Масса, кг</th><th>Где</th><th>Из чего резать</th></tr></thead><tbody>{prow}</tbody></table>
 <p class="note">Размеры и сварка фасонок и пластин — на чертежах узлов (uzly.html). Хомуты Ø8 в лунках (по 3 шт.) — по черновику.</p></div>
