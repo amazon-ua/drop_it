@@ -52,6 +52,8 @@ svg.mm{background:transparent}
   .grid2{grid-template-columns:1fr}
   .grid2 > .card:nth-child(2){width:62%;margin:0 auto}
   h2.pb{break-before:page;page-break-before:always}
+  .grid2.c{grid-template-columns:1.8fr 1fr}
+  .grid2.c > .card:nth-child(2){width:auto;margin:0}
   .card,.grid2,tr,li{break-inside:avoid;page-break-inside:avoid}
   h2,h3{break-after:avoid;page-break-after:avoid}
   h2{break-before:auto}
@@ -447,6 +449,13 @@ def build(final, nf):
                         "посередине между колоннами. Здесь у средней рамы нет колонны: её стропило и затяжка "
                         "опираются на вершину Λ-образной боковой фермы (два красных раскоса от колонн). "
                         "На чертеже — узел у левого ряда (между Л1 и Л3).")
+    zC = 2.10
+    marksC = [(x, y, zC) for x in (0.0, M.SPAN) for y in (0.0, M.BAY)]
+    mmC = minimap_block(mdl, marksC, (0.0, 0.0, zC), "узел В",
+                        "Нижние узлы боковых ферм на колоннах, отметка +2.100 — 4 одинаковых узла (на каждой колонне, "
+                        "со стороны соседней колонны своего ряда). Здесь к колонне приходят раскос боковой фермы "
+                        "(красный, идёт вверх к опоре средней рамы) и нижний пояс (голубой, идёт к другой колонне ряда). "
+                        "На чертеже — колонна <b>Л1</b>: левый ряд, со стороны дороги; у Л3 — зеркально, у правого ряда — так же.")
     svgA = node_A(g)
     svgA2 = node_A_section(g)
     svgB = node_A(g, mid=True)
@@ -573,7 +582,8 @@ def build(final, nf):
 </ul></div>
 
 <h2 class="pb">Узел В — раскос и нижний пояс боковой фермы у колонны (+2.100)</h2>
-<div class="grid2"><div class="card">{svgC}</div><div class="card">{svgC2}</div></div>
+{mmC}
+<div class="grid2 c"><div class="card">{svgC}</div><div class="card">{svgC2}</div></div>
 <div class="card">
 <h3>Как устроен</h3>
 <ul>
