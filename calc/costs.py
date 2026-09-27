@@ -122,6 +122,9 @@ def quantities(model, sc, stock_len=None):
     plate_kg += n_gusset_nodes * (0.14 * max(col.b, 0.06) * 0.006 * 7850)
     plate_kg += 4 * (col.h + 0.01) * (col.b + 0.01) * 0.004 * 7850
     weld_len += n_gusset_nodes * 1.2
+    if getattr(sc, "apex_z", None) is not None and sc.frames == 3:
+        # цеховая боковая ферма: опорный столик 370×80×8 (по одному на ферму)
+        plate_kg += 2 * (0.37 * 0.08 * 0.008 * 7850)
     # площадь окраски (заделка — грунт, считаем 50 %)
     area = 0.0
     for p in pieces:

@@ -2,7 +2,9 @@
 
 Корректировки (для узлов на фасонках все элементы в плоскости рамы — одной ширины 60 мм):
   * колонна 100×50×4 → 100×60×4: фасонки ложатся на колонну, стропило и затяжку в одной плоскости;
-  * стойка-вставка средней рамы 70×70×2 → 60×60×3: ширина как у стропила и затяжки.
+  * стойка-вставка средней рамы 70×70×2 → 60×60×3: ширина как у стропила и затяжки;
+  * боковая ферма — цеховая: нижний пояс 35×35×2 → 60×60×2 (раскос 60 ложится на пояс 60),
+    раскосы сходятся под опорным столиком, на который встаёт стойка-вставка средней рамы.
 Результат — output/final_design.json, усилия в узлах — output/node_forces.json.
 """
 from __future__ import annotations
@@ -19,7 +21,7 @@ from baseline import baseline_scheme
 from report_data import scheme_from_result, sec_by_name
 from run_opt import OUT
 
-OVERRIDES = {"col": "100×60×4", "stub": "60×60×3"}
+OVERRIDES = {"col": "100×60×4", "stub": "60×60×3", "sb": "60×60×2"}
 
 
 def node_forces(an, sc):
@@ -38,6 +40,7 @@ def node_forces(an, sc):
         return np.linalg.norm(np.asarray(p) - np.asarray(q)) < 1e-6
 
     yb = M.BAY / 2
+    apex_z = sc.apex_z if sc.apex_z is not None else M.Z_TIE
     for cname, (u, ends, ql, forces) in an.env.items():
         for mid, mm in m.members.items():
             k = mm.get("kind")
@@ -71,8 +74,10 @@ def node_forces(an, sc):
                     upd("Б_затяжка", f)
                 if k == "col_head" and fy == yb and near(p1, (xc, yb, M.Z_TIE)):
                     upd("Б_стойка_вставка", f)
-                if k == "sd" and near(p1, (xc, yb, M.Z_TIE)):
+                if k == "sd" and near(p1, (xc, yb, apex_z)):
                     upd("Б_раскос_боковой_фермы", f)
+                if k == "stub_low" and near(p1, (xc, yb, apex_z)):
+                    upd("Б_стойка_на_столике", f)
     # узлы труба-к-грани из общего расчёта
     for key, jr in an.joint_results.items():
         name = f"узел_{jr['brace']}→{jr['chord']}"
@@ -87,6 +92,9 @@ def main():
     groups = dict(r["groups"])
     groups.update(OVERRIDES)
     r["groups"] = groups
+    secs = {g: sec_by_name(n) for g, n in groups.items()}
+    tg = M.shop_truss_geom(secs["col"].b, secs["sb"].h, secs["sd"].h)
+    r["params"] = dict(r["params"], apex_z=round(tg["apex_z"], 4))
     sc = scheme_from_result(r)
     base = baseline_scheme()
     an_b = C.Analysis(base, M.Loads()).run_all()

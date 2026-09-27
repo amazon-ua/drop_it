@@ -102,6 +102,36 @@ def lath_rows():
     return sorted(out, key=lambda r: r[0])
 
 
+# ---------------- цеховая боковая ферма ----------------
+def shop_truss_geom(col_b, Hb, Hd, zb=2.10, plate_top=2.930, plate_t=0.008):
+    """Геометрия цеховой Λ-фермы (размеры в м, y — от оси стойки средней рамы к колонне со знаком «−»).
+
+    Нижний пояс (высота Hb, ось zb) — между гранями колонн. Раскос (высота Hd) нижним торцом лежит на
+    верхней грани пояса (горизонтальный рез) и упирается в грань колонны; верхним торцом (тоже
+    горизонтальный рез) приварен снизу к опорному столику; нижние грани двух раскосов сходятся
+    под осью стойки. Возвращает угол раскоса, отметки пересечения осей и длины."""
+    z_ct = zb + Hb / 2                    # верх пояса
+    z_pb = plate_top - plate_t            # низ столика
+    y_face = -(BAY / 2 - col_b / 2)       # грань колонны
+    a = math.atan2(z_pb - z_ct, -y_face)
+    for _ in range(50):
+        foot = Hd / math.sin(a)           # длина опирания раскоса на пояс / под столиком
+        y1 = y_face + foot                # точка, где нижняя грань раскоса выходит на верх пояса
+        a = math.atan2(z_pb - z_ct, -y1)
+    foot = Hd / math.sin(a)
+    y1 = y_face + foot
+    off = Hd / 2 / math.cos(a)            # от нижней грани до оси по вертикали
+    t = math.tan(a)
+    z_axis = lambda y: z_ct + (y - y1) * t + off
+    # заготовка раскоса: оба торца — горизонтальные резы; длина по грани 0…y1, по оси —
+    # от нижнего угла у колонны до верхнего угла у столика
+    L_edge = (0.0 - y1) / math.cos(a)
+    L_upper = (0.0 - y_face) * math.cos(a) + (z_pb - z_ct) * math.sin(a)
+    return dict(alpha=a, foot=foot, y_face=y_face, y1=y1, z_ct=z_ct, z_pb=z_pb,
+                apex_z=z_axis(0.0), z_axis_face=z_axis(y_face), z_axis_col=z_axis(-BAY / 2),
+                L_cut=L_upper, L_edge=L_edge, plate_len=2 * foot + 0.03, plate_top=plate_top, plate_t=plate_t)
+
+
 # ---------------- параметры схемы ----------------
 @dataclass
 class Scheme:
@@ -124,6 +154,8 @@ class Scheme:
     edge_d: float = 0.25             # 5 ферм: крайние фермы — на столько внутрь от кромок кровли, м
     edge_groups: bool = True         # 5 ферм: у крайних ферм свои (облегчённые) сечения
     spr_zb: float = 2.10             # 5 ферм: нижний узел шпренгеля под продольной балкой
+    apex_z: float | None = None      # 3 рамы: цеховая боковая ферма — отметка пересечения осей раскосов
+                                     # под опорным столиком (None — раскосы сходятся на оси затяжки)
     ridge_row_group: str = "lath"
     groups: dict = field(default_factory=dict)   # группа -> Section
 
@@ -211,6 +243,7 @@ def build(sc: Scheme):
     nlat = np.array([0, 1, 0])  # горизонтальная ось, перпендикулярная плоскости рамы
 
     frame_nodes = {}
+    stub_piece = {}
     for fy in frames_y:
         mid_frame = fy not in col_y
         edge = sc.frames == 5 and fy not in (0.0, BAY / 2, BAY) and sc.edge_groups
@@ -253,8 +286,10 @@ def build(sc: Scheme):
         # сама колонна; у средней рамы — стойка-вставка)
         for xc in xcols:
             g = "stub" if mid_frame else "col"
-            b.add_member([(xc, fy, Z_TIE), (xc, fy, Z_NODE)], g, (1, 0, 0),
-                         piece=b.new_piece(g, frame=fy) if mid_frame else None,
+            pc = b.new_piece(g, frame=fy) if mid_frame else None
+            if mid_frame:
+                stub_piece[xc] = pc
+            b.add_member([(xc, fy, Z_TIE), (xc, fy, Z_NODE)], g, (1, 0, 0), piece=pc,
                          kind="col_head", frame=fy)
         # --- решётка фермы
         if sc.web in ("K", "KS"):
@@ -301,6 +336,12 @@ def build(sc: Scheme):
         ym = BAY / 2
         for xc in xcols:
             apex = (xc, ym, Z_TIE)
+            if sc.apex_z is not None:
+                # цеховая ферма: раскосы сходятся под опорным столиком ниже затяжки;
+                # стойка-вставка средней рамы стоит на столике (звено столик — затяжка)
+                apex = (xc, ym, sc.apex_z)
+                b.add_member([apex, (xc, ym, Z_TIE)], "stub", (1, 0, 0), piece=stub_piece[xc],
+                             kind="stub_low")
             for yc in col_y:
                 b.add_member([apex, (xc, yc, sc.side_zb)], "sd", (1, 0, 0), nsub=2, kind="sd")
             b.add_member([(xc, 0.0, sc.side_zb), (xc, BAY, sc.side_zb)], "sb", (0, 0, 1), nsub=4, kind="sb")

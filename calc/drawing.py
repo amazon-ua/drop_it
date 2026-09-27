@@ -282,15 +282,10 @@ def build_html(an, sc, title, notes, details, plan, plates, q, details_split=Non
         tot_buy += buy
         bars_txt = "отрезок" if short else " + ".join(t for t in (f"{c12}×12 м" if c12 else "", f"{c6}×6 м" if c6 else "") if t)
         srow.append(f'<tr><td>□{html.escape(sn)}</td><td class="n">{need_m:.2f}</td>'
-                    f'<td class="n">{need_m * p["sec"].price:,.0f}</td>'.replace(",", "\u202f")
-                    + f'<td>{bars_txt}</td><td class="n">{buy:.2f}</td>'
-                    f'<td class="n">{buy * p["sec"].price:,.0f}</td></tr>'.replace(",", "\u202f"))
+                    f'<td>{bars_txt}</td><td class="n">{buy:.2f}</td></tr>')
         blocks.append(f'<h3>□{html.escape(sn)} — {bars_txt}</h3>' + "".join(rows_html))
-    cost_m = sum(d["L"] * d["n"] * d["sec"].price for d in details)
-    cost_b = sum((p["need"] + 0.02 if p["need"] < 1 else p["buy"]) * p["sec"].price for p in plan.values())
-    srow.append(f'<tr><td><b>Итого</b></td><td class="n"><b>{tot_need:.2f}</b></td><td class="n"><b>{_n(cost_m)}</b></td>'
-                f'<td><b>{n12}×12 + {n6}×6</b></td><td class="n"><b>{tot_buy:.2f}</b></td>'
-                f'<td class="n"><b>{_n(cost_b)}</b></td></tr>')
+    srow.append(f'<tr><td><b>Итого</b></td><td class="n"><b>{tot_need:.2f}</b></td>'
+                f'<td><b>{n12}×12 + {n6}×6</b></td><td class="n"><b>{tot_buy:.2f}</b></td></tr>')
     prow = "".join(
         f'<tr><td>{html.escape(nm)}</td><td>{html.escape(size)}</td><td class="n">{t if t else "—"}</td>'
         f'<td class="n">{n}</td><td class="n">{mass * n:.1f}</td><td class="note">{html.escape(where)}</td>'
@@ -332,8 +327,8 @@ h3{font-size:15px;margin:18px 0 4px}
 <th class="n">N сж, кН</th><th class="n">N раст, кН</th><th class="n">M, кН·м</th><th class="n">Исп.</th><th>Определяющая проверка</th></tr></thead>
 <tbody>{legend}</tbody></table></div>
 <h2>Заготовки (длины реза)</h2>
-<p class="note">Длины — в чистоте, по узлам (см. чертежи узлов): затяжки между гранями колонн/стоек, раскосы — от грани колонны
-до фасонки, подвески и подкосы — между затяжкой и стропилом. Длины колонн — с заделкой в бетон; стропил — по оси.
+<p class="note">Длины — в чистоте, по узлам (см. чертежи узлов): затяжки между гранями колонн/стоек, раскосы боковой фермы —
+от верха пояса у грани колонны до столика, подвески и подкосы — между затяжкой и стропилом. Длины колонн — с заделкой в бетон; стропил — по оси.
 Подкосы и подвески лучше окончательно подогнать по месту на стенде.</p>
 <div class="card long"><table><thead><tr><th>Заготовка</th><th>Сечение</th><th class="n">Длина, м</th><th class="n">Кол-во</th>
 <th class="n">Масса, кг</th><th>Торцы</th></tr></thead><tbody>{drow}</tbody></table></div>
@@ -341,9 +336,9 @@ h3{font-size:15px;margin:18px 0 4px}
 <p class="note"><b>Рекомендуется покупать по метражу с резкой в магазине</b>: платите только за длину деталей, обрешётины
 6.98 м режутся из хлыстов 12 м целиком — без стыков. Если магазин продаёт только целыми хлыстами — ниже раскрой
 с наименьшей закупкой (сочетание хлыстов 6 и 12 м по каждому профилю); в этом случае обрешётину выгоднее резать
-на 5.78 + 1.20 м со стыком над стропилом рамы 3 (закупка 174 м вместо 264 м). Пропил 3 мм. Суммы — по прайсу, для сравнения способов.</p>
-<div class="card"><table><thead><tr><th>Профиль</th><th class="n">По метражу, м</th><th class="n">По метражу, грн</th>
-<th>Целыми хлыстами</th><th class="n">Хлыстов, м</th><th class="n">Хлыстами, грн</th></tr></thead>
+на 5.78 + 1.20 м со стыком над стропилом рамы 3. Пропил 3 мм.</p>
+<div class="card"><table><thead><tr><th>Профиль</th><th class="n">По метражу, м</th>
+<th>Целыми хлыстами</th><th class="n">Хлыстов, м</th></tr></thead>
 <tbody>{"".join(srow)}</tbody></table></div>
 <h3>Раскрой при покупке целыми хлыстами</h3>
 <div class="card long">{"".join(blocks)}</div>
