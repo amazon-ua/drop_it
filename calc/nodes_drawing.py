@@ -22,6 +22,8 @@ T12 = math.tan(M.SLOPE)
 C12 = math.cos(M.SLOPE)
 ALPHA_SD = None  # угол раскоса боковой фермы к горизонту, задаётся по геометрии
 
+SEAM = "#3b0764"   # сварные швы — тёмно-фиолетовые
+
 # цвета элементов (как на общем чертеже)
 COL = {"col": "#2563eb", "raf": "#0f766e", "tie": "#b45309", "sd": "#dc2626", "sb": "#0891b2",
        "plate": "#6b7280", "lath": "#db2777", "stub": "#2563eb", "kp": "#7c3aed"}
@@ -100,9 +102,24 @@ class Svg:
         st = f' style="font-size:{self.FS.get(cls, 18) * self.k:.0f}px"' if self.k != 1 else ""
         self.items.append(f'<text x="{p[0]:.1f}" y="{p[1]:.1f}" class="{cls}" text-anchor="{anchor}"{st}>{html.escape(s)}</text>')
 
-    def leader(self, u1, z1, u2, z2, s, cls="lb", anchor="start"):
-        self.line(u1, z1, u2, z2, "ld")
-        self.text(u2 + (4 if anchor == "start" else -4) * self.k, z2 - 6 * self.k, s, cls, anchor)
+    def leader(self, u1, z1, u2, z2, s, cls="lb", anchor=None):
+        """Выноска: точка на детали (u1, z1) → излом (u2, z2) → полка под текстом.
+        Полка и текст продолжают выноску в её направлении (влево или вправо)."""
+        k = self.k
+        left = (anchor == "end") if anchor else (u2 < u1)
+        w = len(s) * self.FS.get(cls, 18) * 0.56 * k + 4 * k
+        u3 = u2 - w if left else u2 + w
+        a, b, c = self.P(u1, z1), self.P(u2, z2), self.P(u3, z2)
+        self.items.append(f'<polyline points="{a[0]:.1f},{a[1]:.1f} {b[0]:.1f},{b[1]:.1f} {c[0]:.1f},{c[1]:.1f}" class="ld"/>')
+        self.items.append(f'<circle cx="{a[0]:.1f}" cy="{a[1]:.1f}" r="{2.2 * k:.1f}" fill="var(--muted)"/>')
+        self.text(u2 - 3 * k if left else u2 + 3 * k, z2 + 4 * k, s, cls, "end" if left else "start")
+
+    def seam(self, pts, w=4.5, closed=False):
+        """Сварной шов — толстая тёмно-фиолетовая линия по кромке соединения."""
+        pp = " ".join(f"{self.P(u, z)[0]:.1f},{self.P(u, z)[1]:.1f}" for u, z in pts)
+        tag = "polygon" if closed else "polyline"
+        self.items.append(f'<{tag} points="{pp}" fill="none" stroke="{SEAM}" stroke-width="{w * self.k:.1f}" '
+                          f'stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.95"/>')
 
     def weld(self, u, z, n):
         """Маркер шва с номером."""
@@ -204,18 +221,38 @@ def node_A(g):
     s.text(420, 3008, "ось затяжки +3.000", "dt")
     s.text(8, 3318, "ось колонны", "dt")
     s.text(10, 3080, "+3.100", "dt")
-    s.leader(-250, z_bot(-250, Hr) + Hr / C12 / 2, -540, 3300, f"стропило □{g['raf'].name}", "lb")
-    s.leader(-60, top(-60) + 3, -540, 3225, f"опорная пластина {CAP['len']}×60×{cap_t}", "lbs")
-    s.leader(390, 2990, 470, 2930, f"затяжка □{g['tie'].name}")
-    s.leader(-Hc / 2, 2850, -540, 2850, f"колонна □{g['col'].name}")
-    s.leader(120, 2932, 250, 2835, "фасонка t=5 — 2 шт., с обеих сторон", "lb")
+    # швы
+    seams_frame_node(s, g, Hc / 2, x1g, x2g, zbg, top, cap_zb=None)
+    s.leader(-150, z_bot(-150, Hr) + Hr / C12 - 4, -200, 3300, f"стропило □{g['raf'].name}", "lb")
+    s.leader(-L + 5, (top(-L + 5) + z_bot(-L + 5, Hr)) / 2, -300, 3130, f"опорная пластина {CAP['len']}×60×{cap_t}", "lbs")
+    s.leader(-Hc / 2, 2830, -300, 2830, f"колонна □{g['col'].name}")
+    s.leader(360, 3000 + Ht / 2, 470, 3070, f"затяжка □{g['tie'].name}")
+    s.leader(160, 2935, 250, 2840, "фасонка t=5 — 2 шт., с обеих сторон", "lb")
     s.leader(228, z_bot(228, Hr) + Hr / C12 + 20, 330, 3312, f"обрешётина □{g['lath'].name}", "lbs")
-    s.weld(Hc / 2 + 12, 3000 + Ht / 2 + 12, 1)
-    s.weld(-L + 10, top(-L) - 12, 2)
-    s.weld(x2g + 12, 2975, 3)
-    s.weld((x1g + x2g) / 2, z_axis((x1g + x2g) / 2) + 12, 3)
-    s.weld(-20, zbg - 12, 3)
+    s.weld(Hc / 2 + 14, 3000 - Ht / 2 - 14, 1)
+    s.weld(-L - 16, top(-L) - 4, 2)
+    s.weld(x2g + 16, 2975, 3)
+    s.weld(x1g - 16, 2960, 3)
     return s.svg("узел А — вид в плоскости рамы")
+
+
+def seams_frame_node(s, g, xf, x1g, x2g, zbg, top, cap_zb=None):
+    """Швы узла рамы на опорной пластине (узлы А и Б), вид в плоскости рамы.
+    xf — полуширина колонны/стойки в плоскости рамы; x1g…x2g, zbg — фасонка."""
+    Hr, Ht = g["Hr"], g["Ht"]
+    L = CAP["len"] / 2
+    s.seam([(xf, 3000 - Ht / 2), (xf, 3000 + Ht / 2)])                          # 1: торец затяжки
+    s.seam([(-xf, top(-xf)), (xf, top(xf))], w=3.5)                             # 2: колонна — пластина
+    for x in (-L, L):                                                           # 2: пластина — стропило
+        s.seam([(x, top(x)), (x, z_bot(x, Hr))])
+    # 3: фасонка — по кромкам: наружная (к колонне), низ по колонне, верх по стропилу,
+    #    к затяжке — вдоль её рёбер и поперёк по краю фасонки
+    s.seam([(x1g, zbg), (x1g, z_axis(x1g))])
+    s.seam([(x1g, zbg), (xf, zbg)])
+    s.seam([(x1g, z_axis(x1g)), (x2g, z_axis(x2g))])
+    s.seam([(xf, 3000 - Ht / 2), (x2g, 3000 - Ht / 2)], w=3.5)
+    s.seam([(xf, 3000 + Ht / 2), (x2g, 3000 + Ht / 2)], w=3.5)
+    s.seam([(x2g, 3000 - Ht / 2), (x2g, 3000 + Ht / 2)])
 
 
 def node_A_section(g):
@@ -241,17 +278,22 @@ def node_A_section(g):
     for sgn in (-1, 1):
         u1, u2 = sgn * B / 2, sgn * (B / 2 + tp)
         s.rect(min(u1, u2), GUSSET["zb"], max(u1, u2), ztop, "#6b7280", "#111", 1, 0.8)
-    s.leader(g["Br"] / 2, zb + Hr / C12 - 20, 130, 3290, f"стропило □{g['raf'].name}")
-    s.leader(B / 2, zb - 3, 130, 3200, "опорная пластина", "lbs")
+    # швы: колонна — опорная пластина; фасонки — к колонне по низу; к стропилу по верху
+    s.seam([(-B / 2, zcap), (B / 2, zcap)], w=3.5)
+    for sgn in (-1, 1):
+        s.seam([(sgn * B / 2, GUSSET["zb"]), (sgn * (B / 2 + tp), GUSSET["zb"])], w=5)
+        s.seam([(sgn * (B / 2 + tp), zb), (sgn * (B / 2 + tp), zb + 12)], w=5)
+    s.leader(g["Br"] / 2, zb + Hr / C12 - 20, 130, 3265, f"стропило □{g['raf'].name}")
+    s.leader(B / 2 + 0.1, zb - 3, 130, 3190, "опорная пластина", "lbs")
     s.leader(g["Bt"] / 2, 3000 + 10, 130, 3110, "затяжка — вне разреза (пунктир)", "lbs")
-    s.leader(B / 2 + tp, GUSSET["zb"] + 10, 130, 2960, "фасонки t=5", "lbs")
+    s.leader(B / 2 + tp, GUSSET["zb"] + 30, 130, 2960, "фасонки t=5", "lbs")
     s.leader(B / 2, 2850, 130, 2850, f"колонна □{g['col'].name} (рассечена вдоль)", "lbs")
     s.dim_h(-B / 2 - tp, B / 2 + tp, GUSSET["zb"], f"{B + 2 * tp:.0f}", off=18)
     s.dim_h(-B / 2, B / 2, zb_col, f"{B:.0f}", off=16)
     s.line(0, 2790, 0, 3290)
-    s.text(-320, 3310, "разрез по оси колонны, вид со стороны пролёта", "lbs")
-    s.weld(B / 2 + tp + 10, GUSSET["zb"] + 30, 3)
-    s.weld(-B / 2 - tp - 10, 3000, 3)
+    s.text(-320, 3322, "разрез по оси колонны, вид со стороны пролёта", "lbs")
+    s.weld(-B / 2 - tp - 18, GUSSET["zb"] + 6, 3)
+    s.weld(-B / 2 - 18, zcap - 8, 2)
     return s.svg("узел А — разрез поперёк рамы")
 
 
@@ -298,19 +340,21 @@ def node_B(g):
     s.text(420, 3008, "ось затяжки +3.000", "dt")
     s.text(8, 3318, "ось стойки", "dt")
     s.text(10, 3080, "+3.100", "dt")
-    s.text(-545, zpt - 2, f"верх столика +{zpt/1000:.3f}", "dt")
-    s.leader(-250, z_bot(-250, Hr) + Hr / C12 / 2, -540, 3300, f"стропило □{g['raf'].name}", "lb")
-    s.leader(-60, top(-60) + 3, -540, 3225, f"опорная пластина {CAP['len']}×60×{cap_t}", "lbs")
-    s.leader(390, 3010, 470, 3075, f"затяжка □{g['tie'].name}")
-    s.leader(-Hs / 2, 2990, -540, 3000, f"стойка-вставка □{g['stub'].name}")
-    s.leader(-w / 2, (zpt + zpb) / 2, -540, 2890, f"опорный столик фермы {tg['plate_len']:.0f}×{w:.0f}×{tg['plate_t']:.0f}", "lbs")
-    s.leader(-g["Hd"] / 2, 2800, -540, 2790, f"раскосы фермы □{g['sd'].name} (из плоскости)", "lbs")
-    s.leader(120, 2945, 250, 2860, "фасонка t=5 — 2 шт., с обеих сторон", "lb")
-    s.weld(Hs / 2 + 12, 3000 + Ht / 2 + 12, 1)
-    s.weld(-L + 10, top(-L) - 12, 2)
-    s.weld(gb["x2"] + 12, 2975, 3)
-    s.weld((gb["x1"] + gb["x2"]) / 2, z_axis((gb["x1"] + gb["x2"]) / 2) + 12, 3)
-    s.weld(w / 2 + 16, zpt + 10, 4)
+    s.text(240, zpt - 38, f"верх столика +{zpt/1000:.3f}", "dt")
+    seams_frame_node(s, g, Hs / 2, gb["x1"], gb["x2"], gb["zb"], top)
+    s.seam([(-w / 2 + 2, zpt), (w / 2 - 2, zpt)], w=5)                           # 4: к столику (объект)
+    s.leader(-150, z_bot(-150, Hr) + Hr / C12 - 4, -200, 3300, f"стропило □{g['raf'].name}", "lb")
+    s.leader(-L + 5, (top(-L + 5) + z_bot(-L + 5, Hr)) / 2, -300, 3130, f"опорная пластина {CAP['len']}×60×{cap_t}", "lbs")
+    s.leader(-Hs / 2, 2960, -250, 2930, f"стойка-вставка □{g['stub'].name}")
+    s.leader(-w / 2, (zpt + zpb) / 2, -230, 2870, f"опорный столик фермы {tg['plate_len']:.0f}×{w:.0f}×{tg['plate_t']:.0f}", "lbs")
+    s.leader(-g["Hd"] / 2, 2790, -130, 2770, f"раскосы фермы □{g['sd'].name} (из плоскости)", "lbs")
+    s.leader(360, 3000 + Ht / 2, 470, 3070, f"затяжка □{g['tie'].name}")
+    s.leader(160, 2945, 250, 2825, "фасонка t=5 — 2 шт., с обеих сторон", "lb")
+    s.weld(Hs / 2 + 14, 3000 - Ht / 2 - 14, 1)
+    s.weld(-L - 16, top(-L) - 4, 2)
+    s.weld(gb["x2"] + 16, 2975, 3)
+    s.weld(gb["x1"] - 16, 2995, 3)
+    s.weld(-w / 2 - 16, zpt - 8, 4)
     return s.svg("узел Б — вид в плоскости средней рамы")
 
 
@@ -361,20 +405,26 @@ def node_B_section(g):
     s.line(0, 2700, 0, 3290)
     s.items.append(f'<circle cx="{s.P(0, za)[0]:.1f}" cy="{s.P(0, za)[1]:.1f}" r="3" fill="var(--fg)"/>')
     s.dim_h(0, foot, zpb - 120, f"{foot:.0f}", off=0)
-    s.text(-460, 3310, "разрез по оси стойки поперёк рамы — в плоскости боковой фермы", "lbs")
+    s.text(-460, 3322, "разрез по оси стойки поперёк рамы — в плоскости боковой фермы", "lbs")
     s.text(-460, za + 8, f"оси раскосов +{za/1000:.3f}", "dt")
     s.text(-460, 2705, f"раскосы под {math.degrees(a):.1f}° к горизонту", "dt")
-    s.leader(g["Br"] / 2, zb + Hr / C12 - 20, 130, 3290, f"стропило □{g['raf'].name}")
+    # швы: 4 — низ стойки и фасонок к столику (объект); 7 — раскосы под столиком (цех);
+    # 2 — стойка к опорной пластине
+    for sgn in (-1, 1):
+        s.seam([(sgn * (B / 2 + tp), zpt + 1), (sgn * (B / 2 + tp + 8), zpt + 1)], w=6)
+        s.seam([(0, zpb - 1.5), (sgn * foot, zpb - 1.5)], w=4)
+    s.seam([(-B / 2, zcap), (B / 2, zcap)], w=3.5)
+    s.leader(g["Br"] / 2, zb + Hr / C12 - 20, 130, 3265, f"стропило □{g['raf'].name}")
     s.leader(g["Bt"] / 2, 3000 + 10, 130, 3150, "затяжка — вне разреза (пунктир)", "lbs")
-    s.leader(B / 2 + tp, 2960, 130, 3080, "фасонки t=5", "lbs")
-    s.leader(-B / 2 + tc / 2, 2975, -300, 3080, f"стойка □{g['stub'].name}", "lbs")
-    s.leader(Lp / 2 - 20, zpt, 250, 2990, f"столик фермы {Lp:.0f}×{PLATE_B['w']}×{tg['plate_t']:.0f}", "lbs")
-    s.leader(300, zpb - 300 * ta + 3, 120, 2735, f"раскос □{g['sd'].name} (рассечён вдоль)", "lbs")
-    s.weld(B / 2 + tp + 14, zpt + 14, 4)
-    s.weld(-B / 2 - tp - 14, zpt + 14, 4)
-    s.weld(-foot / 2, zpb - 14, 7)
-    s.weld(foot / 2, zpb - 14, 7)
-    s.weld(0, zpb - 45, 7)
+    s.leader(B / 2 + tp, 2975, 130, 3060, "фасонки t=5", "lbs")
+    s.leader(-B / 2 + tc / 2, 2990, -150, 3080, f"стойка □{g['stub'].name}", "lbs")
+    s.leader(Lp / 2 - 10, zpt, 250, 2990, f"столик {Lp:.0f}×{PLATE_B['w']}×{tg['plate_t']:.0f}", "lbs")
+    s.leader(360, zpb - 360 * ta + 4, 400, 2735, f"раскос □{g['sd'].name} (рассечён вдоль)", "lbs", anchor="end")
+    s.weld(B / 2 + tp + 26, zpt + 16, 4)
+    s.weld(-B / 2 - tp - 26, zpt + 16, 4)
+    s.weld(-foot * 0.6, zpb - 20, 7)
+    s.weld(foot * 0.6, zpb - 20, 7)
+    s.weld(-B / 2 - 18, zcap - 8, 2)
     return s.svg("узел Б — разрез в плоскости боковой фермы")
 
 
@@ -439,6 +489,12 @@ class Axo:
 
     def line(self, p, q, style):
         self.lines.append((p, q, style))
+
+    def seam(self, pts, closed=False):
+        """Сварной шов — толстая тёмно-фиолетовая линия (поверх граней)."""
+        pts = list(pts) + ([pts[0]] if closed else [])
+        for p, q in zip(pts[:-1], pts[1:]):
+            self.lines.append((p, q, f'stroke="{SEAM}" stroke-width="4.5" stroke-linecap="round"'))
 
     def svg(self, aria):
         pts = [self.pr(v) for _, _, f, *_ in self.faces for v in f]
@@ -513,7 +569,18 @@ def node_B_axo(g, lift=240.0, eye=(-1.0, -0.7, 0.5)):
     # стрелка установки
     A.line((-120, 0, zpt + dz - 20), (-120, 0, zpt + 25),
            'stroke="#dc2626" stroke-width="2.5" stroke-dasharray="8 5" marker-end="url(#arr)"')
-    # швы
+    # швы: 1 — торец затяжки к стойке; 2 — пластина к стропилу; 3 — ближняя фасонка по кромкам;
+    # 4 — место шва на столике (объект); 7 — раскосы под столиком (видимая сторона)
+    yn = -Bs / 2 - 5
+    A.seam([(Hs / 2, yn, 3000 - Ht / 2 + dz), (Hs / 2, yn, 3000 + Ht / 2 + dz)])
+    A.seam([(-L, -Bs / 2, top(-L) + dz), (-L, -Bs / 2, z_bot(-L, Hr) + dz)])
+    A.seam([(gb["x1"], yn, gb["zb"] + dz), (gb["x1"], yn, z_axis(gb["x1"]) + dz),
+            (gb["x2"], yn, z_axis(gb["x2"]) + dz)])
+    A.seam([(Hs / 2, yn, 3000 - Ht / 2 + dz), (gb["x2"], yn, 3000 - Ht / 2 + dz),
+            (gb["x2"], yn, 3000 + Ht / 2 + dz), (Hs / 2, yn, 3000 + Ht / 2 + dz)])
+    A.seam([(-Hs / 2, -Bs / 2 - 5, zpt), (Hs / 2, -Bs / 2 - 5, zpt), (Hs / 2, Bs / 2 + 5, zpt),
+            (-Hs / 2, Bs / 2 + 5, zpt)], closed=True)
+    A.seam([(-Hd / 2, -foot, zpb), (-Hd / 2, foot, zpb)])
     A.mark((Hs / 2 + 30, -Bs / 2 - 6, 3000 + Ht / 2 + dz), 1)
     A.mark((-L, -Bs / 2, top(-L) + dz), 2)
     A.mark((150, -Bs / 2 - 6, 2990 + dz), 3)
@@ -567,9 +634,13 @@ def truss_elev(g):
     s.dim_v(Lp / 2 + 30, 2100, zpt, f"{zpt - 2100:.0f}", off=0, anchor="start")
     s.text(220, zpt + 20, f"верх столика +{zpt/1000:.3f}, столик {Lp:.0f}×{PLATE_B['w']}×{tg['plate_t']:.0f}", "dt")
     s.text(200, 2100 + 50, "ось пояса +2.100", "dt")
-    s.leader(-half * 0.55, 2100 + Hb / 2, -half * 0.62, 2290, f"нижний пояс □{g['sb'].name}", "lb")
-    ym = yf * 0.55
-    s.leader(-ym, zpb - ym * ta + 20, -ym - 250, 2860, f"раскос □{g['sd'].name}", "lb")
+    for sgn in (-1, 1):
+        s.seam([(sgn * yf, zct + 1), (sgn * (yf - foot), zct + 1)], w=4)          # 6: раскос на поясе
+        s.seam([(0, zpb - 1), (sgn * foot, zpb - 1)], w=4)                       # 7: раскос под столиком
+        s.seam([(sgn * yf, 2100 - Hb / 2), (sgn * yf, zct + 3)], w=4)             # 5: торец фермы к колонне
+    s.leader(-half * 0.55, 2100 + Hb / 2, -half * 0.48, 2290, f"нижний пояс □{g['sb'].name}", "lb")
+    ya = yf - 380
+    s.leader(-ya, zct + (yf - foot - ya) * ta + 30, -1700, 2860, f"раскос □{g['sd'].name}", "lb", anchor="start")
     s.text(-half + 60, 3060, "колонна Л1", "lbs")
     s.text(half - 60, 3060, "колонна Л3", "lbs", "end")
     s.text(150, 2330, f"раскос под {math.degrees(a):.1f}° к горизонту", "lbs")
@@ -606,15 +677,17 @@ def node_C(g):
     zax = lambda u: tg["z_axis_col"] + (u - 0) * ta
     s.line(-140, zax(-140), 690, zax(690))
     s.line(0, 1995, 0, 2355)
-    s.dim_h(u0, u1, zct, f"{foot:.0f}", off=-26)
+    s.dim_h(u0, u1, 2100 - Hb / 2, f"{foot:.0f}", off=34)
     s.text(-410, 2100 + 6, "ось пояса +2.100", "dt")
-    s.leader(560, zct + (560 - u1) * ta + Hd / math.cos(a) * 0.8, 520, 2350, f"раскос □{g['sd'].name}", "lb")
-    s.leader(420, 2100 - Hb / 2, 380, 1990, f"нижний пояс □{g['sb'].name}", "lb")
-    s.leader(-Bc / 2, 2300, -410, 2330, f"колонна □{g['col'].name}", "lb")
+    s.seam([(u0, 2100 - Hb / 2), (u0, zct + 3)], w=5)                            # 5: торец фермы к колонне
+    s.seam([(u0, zct + 1), (u1, zct + 1)], w=5)                                  # 6: раскос на поясе
+    s.leader(600, zct + (600 - (u0 + u1) / 2) * ta, 560, 2355, f"раскос □{g['sd'].name}", "lb")
+    s.leader(460, 2100 - Hb / 2, 420, 1990, f"нижний пояс □{g['sb'].name}", "lb")
+    s.leader(-Bc / 2, 2300, -200, 2330, f"колонна □{g['col'].name}", "lb")
     s.text(-410, 1945, f"раскос под {math.degrees(a):.1f}° к горизонту; оси раскоса", "lbs")
     s.text(-410, 1922, "и пояса пересекаются у грани колонны", "lbs")
-    s.weld(u0 + 16, 2100 - Hb / 2 - 14, 5)
-    s.weld(u1 + 90, zct + 55, 6)
+    s.weld(u0 + 18, 2100 - Hb / 2 - 16, 5)
+    s.weld(u1 + 40, zct + 26, 6)
     return s.svg("узел В — торец фермы у колонны")
 
 
@@ -622,10 +695,11 @@ def node_C_face(g):
     """Вид на грань колонны со стороны фермы: след торца пояса и угла раскоса."""
     Hc, Hb, Hd = g["Hc"], g["Hb"], g["Hd"]
     zct = g["tg"]["z_ct"]
-    s = Svg(-260, 260, 1960, 2380)
+    s = Svg(-260, 320, 1960, 2380)
     s.rect(-Hc / 2, 1960, Hc / 2, 2360, COL["col"], "#0008", 0.9)
     s.rect(-Hb / 2, 2100 - Hb / 2, Hb / 2, 2100 + Hb / 2, COL["sb"], "#000", 0.85, 1.2)
     s.rect(-Hd / 2, zct, Hd / 2, zct + 4, COL["sd"], "#000", 0.85, 1.0)
+    s.seam([(-Hb / 2, 2100 - Hb / 2), (Hb / 2, 2100 - Hb / 2), (Hb / 2, zct + 4), (-Hb / 2, zct + 4)], w=4, closed=True)
     s.dim_h(-Hc / 2, Hc / 2, 1960, f"{Hc:.0f}", off=16)
     s.dim_h(-Hb / 2, Hb / 2, 2100 + Hb / 2, f"{Hb:.0f}", off=-14)
     s.text(-250, 2365, "вид на грань колонны со стороны фермы", "lbs")
@@ -798,8 +872,9 @@ def build(final, nf):
 <h1>Узлы каркаса навеса</h1>
 <p class="sub">Сварные узлы: оголовок колонны (А), опора средней рамы на боковую ферму (Б), конец боковой фермы
 у колонны (В); боковая ферма целиком и порядок сборки — цех / объект. Размеры — мм, отметки — м от верха щебня.
-Узлы показаны у левого ряда колонн; у правого ряда — зеркально. Номера <span class="wk">1</span> на чертежах — швы
-из таблиц. На разрезах рассечённые трубы показаны стенками (внутри пусто), пластины — сплошными, элементы вне
+Узлы показаны у левого ряда колонн; у правого ряда — зеркально. <b>Сварные швы — толстые тёмно-фиолетовые линии</b>
+<span style="display:inline-block;width:28px;height:5px;border-radius:3px;background:{SEAM};vertical-align:middle"></span>,
+номера <span class="wk">1</span> — швы из таблиц. На разрезах рассечённые трубы показаны стенками (внутри пусто), пластины — сплошными, элементы вне
 плоскости разреза — пунктиром.</p>
 <div class="card"><span class="pill">колонна □{col.name}</span><span class="pill">стропило □{raf.name}</span>
 <span class="pill">затяжка □{tie.name}</span><span class="pill">стойка-вставка □{stub.name}</span>
