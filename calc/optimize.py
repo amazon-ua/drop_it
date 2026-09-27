@@ -27,7 +27,7 @@ def rotated(s: Section) -> Section:
                    iy=s.iz, iz=s.iy)
 
 
-ROTATABLE = {"lath", "tie", "eave", "sb", "st"}
+ROTATABLE = {"lath", "tie", "eave", "sb", "st", "tie_e", "lb"}
 
 
 def candidates(secs, group, paint_rate, min_b=0.0, max_b=1.0):
@@ -275,6 +275,8 @@ def default_groups(sc: M.Scheme, secs):
         "strut": "40×40×2", "knee": "40×40×2", "lath": "40×40×2", "sd": "50×50×2",
         "sb": "40×40×2", "st": "60×40×2", "stub": "80×80×3", "eave": "60×40×2",
         "kl": "40×40×2", "xb": "40×40×2",
+        "raf_e": "60×40×2", "tie_e": "40×40×2", "kp_e": "20×20×2", "strut_e": "20×20×2",
+        "lb": "80×40×3", "spd": "40×40×2", "spp": "50×50×2",
     }
     need = {"col", "raf", "tie", "lath"}
     if sc.web in ("K", "KS"):
@@ -283,6 +285,14 @@ def default_groups(sc: M.Scheme, secs):
         need.add("strut")
     if sc.knee_t:
         need.add("knee")
+    if sc.frames == 5:
+        need |= {"stub", "lb", "spd", "spp"}
+        if sc.edge_groups:
+            need |= {"raf_e", "tie_e"}
+            if sc.web in ("K", "KS"):
+                need.add("kp_e")
+            if sc.web == "KS":
+                need.add("strut_e")
     if sc.frames == 3:
         need |= {"sd", "sb", "stub"}
         if sc.side_top:

@@ -42,7 +42,20 @@ def scheme_space():
     return out
 
 
+def scheme_space_five():
+    """5 поперечных ферм: крайние у кромок кровли, продольная балка + шпренгель."""
+    common = dict(knee_z=2.30, knee_dx=0.70, embed=0.70, base="spring", roof_x=False,
+                  edge_d=0.25, edge_groups=True, spr_zb=2.10)
+    return [dict(frames=5, web=web, knee_t=knee, **common)
+            for web, knee in itertools.product(("K", "KS"), (True, False))]
+
+
 def label(p):
+    if p["frames"] == 5:
+        s = "5 ферм (крайние у кромок, продольная балка + шпренгель)"
+        s += ", подвеска" if p["web"] == "K" else ", подвеска + подкосы фермы"
+        s += ", попер. подкосы" if p["knee_t"] else ", без попер. подкосов"
+        return s
     if p["frames"] == 3:
         s = "3 рамы (средняя на боковых фермах)"
         s += ", верхн. пояс" if p.get("side_top") else ", без верхн. пояса"
@@ -58,8 +71,8 @@ def label(p):
 
 
 LOADS = {"all": M.Loads(), "normal": M.Loads(), "ch07": M.Loads(Ch=0.70),
-         "normal07": M.Loads(Ch=0.70)}
-NORMAL_MODES = ("normal", "normal07")
+         "normal07": M.Loads(Ch=0.70), "five": M.Loads(Ch=0.70)}
+NORMAL_MODES = ("normal", "normal07", "five")
 
 
 def run_one(args):
@@ -87,7 +100,7 @@ def run_one(args):
 
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "all"
-    space = scheme_space()
+    space = scheme_space_five() if mode == "five" else scheme_space()
     if mode in ("normal", "ch07"):
         # без «спеццен» / для местности II считаем 4 лучшие схемы основного перебора
         prev = json.loads((OUT / "opt_results_all.json").read_text())

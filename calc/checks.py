@@ -347,7 +347,7 @@ class Analysis:
             U = u.reshape(-1, 6)[:, :3]
             for mid, mm in m.members.items():
                 kind = mm.get("kind")
-                if kind not in ("lath", "rafter", "tie", "eave", "sb", "st"):
+                if kind not in ("lath", "rafter", "tie", "eave", "sb", "st", "lb"):
                     continue
                 nodes = []
                 for ei in mm["elems"]:
@@ -431,8 +431,8 @@ class Analysis:
                 e = m.elems[ei]
                 node_members[e.n1].add(mid)
                 node_members[e.n2].add(mid)
-        chord_kinds = {"rafter", "tie", "col", "eave", "sb", "st"}
-        brace_kinds = {"strut", "kp", "knee", "sd", "kl", "sb"}
+        chord_kinds = {"rafter", "tie", "col", "eave", "sb", "st", "lb"}
+        brace_kinds = {"strut", "kp", "knee", "sd", "kl", "sb", "spd", "spp"}
         gusset_nodes = self.gusset_nodes()
         res = {}
         for mid, mm in m.members.items():

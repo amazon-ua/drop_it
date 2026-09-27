@@ -121,6 +121,9 @@ class Scheme:
     base: str = "spring"             # 'spring' — упругая заделка в лунке, 'pin' — шарнир
     embed: float = 1.25              # заделка колонны в бетон, м
     skew: float = SKEW               # косина площадки (0 — прямоугольник)
+    edge_d: float = 0.25             # 5 ферм: крайние фермы — на столько внутрь от кромок кровли, м
+    edge_groups: bool = True         # 5 ферм: у крайних ферм свои (облегчённые) сечения
+    spr_zb: float = 2.10             # 5 ферм: нижний узел шпренгеля под продольной балкой
     ridge_row_group: str = "lath"
     groups: dict = field(default_factory=dict)   # группа -> Section
 
@@ -144,6 +147,13 @@ GROUP_INFO = {
     "eave": ("Продольная обвязка", "main"),
     "kl": ("Продольные подкосы", "web"),
     "xb": ("Связи по скатам", "brace"),
+    "raf_e": ("Стропила крайних ферм", "main"),
+    "tie_e": ("Затяжки крайних ферм", "main"),
+    "kp_e": ("Подвеска крайних ферм", "web"),
+    "strut_e": ("Подкосы крайних ферм", "web"),
+    "lb": ("Продольная балка", "main"),
+    "spd": ("Раскосы шпренгеля", "web"),
+    "spp": ("Стойка шпренгеля", "web"),
 }
 
 
@@ -192,7 +202,10 @@ class Builder:
 def build(sc: Scheme):
     b = Builder(sc)
     rows = lath_rows()
-    frames_y = [0.0, BAY / 2, BAY] if sc.frames == 3 else [0.0, BAY]
+    if sc.frames == 5:
+        frames_y = [Y_MIN + sc.edge_d, 0.0, BAY / 2, BAY, Y_MAX - sc.edge_d]
+    else:
+        frames_y = [0.0, BAY / 2, BAY] if sc.frames == 3 else [0.0, BAY]
     col_y = [0.0, BAY]
     xcols = [0.0, SPAN]
     nlat = np.array([0, 1, 0])  # горизонтальная ось, перпендикулярная плоскости рамы
@@ -200,7 +213,9 @@ def build(sc: Scheme):
     frame_nodes = {}
     for fy in frames_y:
         mid_frame = fy not in col_y
-        rafter_g = "raf"
+        edge = sc.frames == 5 and fy not in (0.0, BAY / 2, BAY) and sc.edge_groups
+        sfx = "_e" if edge else ""
+        rafter_g = "raf" + sfx
         # --- стропила: разбивка по рядам обрешётки + узлы решётки
         xs = sorted(set([r[0] for r in rows] + [0.0, SPAN, X_RIDGE,
                                                  X_RIDGE - sc.strut_dx, X_RIDGE + sc.strut_dx]))
@@ -230,9 +245,9 @@ def build(sc: Scheme):
         if sc.knee_t:
             xt += [sc.knee_dx, SPAN - sc.knee_dx]
         xt = sorted(set(xt))
-        tie_piece = b.new_piece("tie", frame=fy)
+        tie_piece = b.new_piece("tie" + sfx, frame=fy)
         for x1, x2 in zip(xt[:-1], xt[1:]):
-            b.add_member([(x1, fy, Z_TIE), (x2, fy, Z_TIE)], "tie", (0, 0, 1), piece=tie_piece,
+            b.add_member([(x1, fy, Z_TIE), (x2, fy, Z_TIE)], "tie" + sfx, (0, 0, 1), piece=tie_piece,
                          nsub=2, kind="tie", frame=fy)
         # связь затяжки с узлом стропила: короткая вставка колонны (у рам на колоннах —
         # сама колонна; у средней рамы — стойка-вставка)
@@ -243,11 +258,11 @@ def build(sc: Scheme):
                          kind="col_head", frame=fy)
         # --- решётка фермы
         if sc.web in ("K", "KS"):
-            b.add_member([(X_RIDGE, fy, Z_TIE), (X_RIDGE, fy, z_rafter(X_RIDGE))], "kp", (1, 0, 0),
+            b.add_member([(X_RIDGE, fy, Z_TIE), (X_RIDGE, fy, z_rafter(X_RIDGE))], "kp" + sfx, (1, 0, 0),
                          nsub=2, kind="kp", frame=fy)
         if sc.web == "KS":
             for xs_ in (X_RIDGE - sc.strut_dx, X_RIDGE + sc.strut_dx):
-                b.add_member([(X_RIDGE, fy, Z_TIE), (xs_, fy, z_rafter(xs_))], "strut", (0, 1, 0),
+                b.add_member([(X_RIDGE, fy, Z_TIE), (xs_, fy, z_rafter(xs_))], "strut" + sfx, (0, 1, 0),
                              nsub=2, kind="strut", frame=fy)
         # --- поперечные подкосы колонна→затяжка (только у рам на колоннах)
         if sc.knee_t and not mid_frame:
@@ -293,6 +308,19 @@ def build(sc: Scheme):
                 pc = b.new_piece("st", x=xc)
                 b.add_member([(xc, 0.0, Z_TIE), apex], "st", (0, 0, 1), piece=pc, nsub=2, kind="st")
                 b.add_member([apex, (xc, BAY, Z_TIE)], "st", (0, 0, 1), piece=pc, nsub=2, kind="st")
+    elif sc.frames == 5:
+        # продольная балка по оголовкам колонн — от крайней фермы до крайней (консоли за колоннами)
+        # + шпренгель под средним пролётом: раскосы от оголовков колонн вниз к узлу на spr_zb
+        # и стойка от узла вверх к балке под средней фермой
+        ym = BAY / 2
+        for xc in xcols:
+            pc = b.new_piece("lb", x=xc)
+            for y1, y2 in zip(frames_y[:-1], frames_y[1:]):
+                b.add_member([(xc, y1, Z_TIE), (xc, y2, Z_TIE)], "lb", (0, 0, 1), piece=pc, nsub=2, kind="lb")
+            bot = (xc, ym, sc.spr_zb)
+            for yc in col_y:
+                b.add_member([(xc, yc, Z_TIE), bot], "spd", (1, 0, 0), nsub=2, kind="spd")
+            b.add_member([bot, (xc, ym, Z_TIE)], "spp", (1, 0, 0), nsub=2, kind="spp")
     else:
         if sc.eave_beam:
             for xc in xcols:
