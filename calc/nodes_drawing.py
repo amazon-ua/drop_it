@@ -401,7 +401,7 @@ class Axo:
         p = np.asarray(p, float)
         return float(p @ self.rt) * self.S, float(-(p @ self.up)) * self.S
 
-    def prism(self, poly, plane, a, b, fill, op=1.0, dz=0.0):
+    def prism(self, poly, plane, a, b, fill, op=1.0, dz=0.0, layer=0):
         """poly — многоугольник в плоскости plane ('xz' | 'yz' | 'xy'), вытянутый по третьей оси от a до b."""
         import numpy as np
 
@@ -425,10 +425,10 @@ class Axo:
             if np.linalg.norm(nrm) < 1e-9 or np.dot(nrm, self.e) <= 1e-9:
                 continue                       # грань смотрит от зрителя
             shade = 0.55 + 0.45 * abs(np.dot(nrm / np.linalg.norm(nrm), self.e))
-            self.faces.append((float(c @ self.e), f, fill, op, shade))
+            self.faces.append((layer, float(c @ self.e), f, fill, op, shade))
 
-    def box(self, x1, x2, y1, y2, z1, z2, fill, op=1.0, dz=0.0):
-        self.prism([(x1, z1), (x2, z1), (x2, z2), (x1, z2)], "xz", y1, y2, fill, op, dz)
+    def box(self, x1, x2, y1, y2, z1, z2, fill, op=1.0, dz=0.0, layer=0):
+        self.prism([(x1, z1), (x2, z1), (x2, z2), (x1, z2)], "xz", y1, y2, fill, op, dz, layer)
 
     def mark(self, p, n):
         self.marks.append((p, n))
@@ -441,7 +441,7 @@ class Axo:
         self.lines.append((p, q, style))
 
     def svg(self, aria):
-        pts = [self.pr(v) for _, f, *_ in self.faces for v in f]
+        pts = [self.pr(v) for _, _, f, *_ in self.faces for v in f]
         xs, ys = [p[0] for p in pts], [p[1] for p in pts]
         mg = 250
         x0, x1 = min(xs) - mg, max(xs) + mg
@@ -449,7 +449,8 @@ class Axo:
         W, H = x1 - x0, y1 - y0
         P = lambda p: (self.pr(p)[0] - x0, self.pr(p)[1] - y0)
         o = [f'<svg viewBox="0 0 {W:.0f} {H:.0f}" class="nd" role="img" aria-label="{html.escape(aria)}">']
-        for d, f, fill, op, shade in sorted(self.faces, key=lambda t: t[0]):
+        # слои рисуются снизу вверх (раскосы → столик → рама), внутри слоя — по глубине граней
+        for _, d, f, fill, op, shade in sorted(self.faces, key=lambda t: (t[0], t[1])):
             s_ = " ".join(f"{P(v)[0]:.1f},{P(v)[1]:.1f}" for v in f)
             o.append(f'<polygon points="{s_}" fill="{fill}" fill-opacity="{op:.2f}" stroke="#111" stroke-opacity="0.55" '
                      f'stroke-width="0.7" style="filter:brightness({shade:.2f})"/>')
@@ -492,23 +493,23 @@ def node_B_axo(g, lift=240.0, eye=(-1.0, -0.7, 0.5)):
     for sgn in (-1, 1):
         poly = [(0, zpb), (sgn * foot, zpb), (sgn * yb, zpb - (yb - foot) * ta), (sgn * yb, zpb - yb * ta)]
         A.prism(poly, "yz", -Hd / 2, Hd / 2, COL["sd"])
-    A.box(-w / 2, w / 2, -Lp / 2, Lp / 2, zpb, zpt, COL["plate"])
+    A.box(-w / 2, w / 2, -Lp / 2, Lp / 2, zpb, zpt, COL["plate"], layer=1)   # столик лежит поверх раскосов
     # --- узел средней рамы (верх), поднят на lift
     cap_t = CAP["t"]
     top = lambda x: z_bot(x, Hr) - cap_t
     dz = lift
     A.prism([(-Hs / 2, zpt), (Hs / 2, zpt), (Hs / 2, top(Hs / 2)), (-Hs / 2, top(-Hs / 2))], "xz", -Bs / 2, Bs / 2,
-            COL["stub"], dz=dz)
+            COL["stub"], dz=dz, layer=2)
     L = CAP["len"] / 2
-    A.prism([(-L, top(-L)), (L, top(L)), (L, z_bot(L, Hr)), (-L, z_bot(-L, Hr))], "xz", -Bs / 2, Bs / 2, COL["plate"], dz=dz)
+    A.prism([(-L, top(-L)), (L, top(L)), (L, z_bot(L, Hr)), (-L, z_bot(-L, Hr))], "xz", -Bs / 2, Bs / 2, COL["plate"], dz=dz, layer=2)
     xa, xb = -220, 320
     A.prism([(xa, z_bot(xa, Hr)), (xb, z_bot(xb, Hr)), (xb, z_bot(xb, Hr) + Hr / C12), (xa, z_bot(xa, Hr) + Hr / C12)],
-            "xz", -g["Br"] / 2, g["Br"] / 2, COL["raf"], dz=dz)
-    A.box(Hs / 2, 380, -g["Bt"] / 2, g["Bt"] / 2, 3000 - Ht / 2, 3000 + Ht / 2, COL["tie"], dz=dz)
+            "xz", -g["Br"] / 2, g["Br"] / 2, COL["raf"], dz=dz, layer=2)
+    A.box(Hs / 2, 380, -g["Bt"] / 2, g["Bt"] / 2, 3000 - Ht / 2, 3000 + Ht / 2, COL["tie"], dz=dz, layer=2)
     gb = gusset_B(g)
     gp = [(gb["x1"], gb["zb"]), (gb["x2"], gb["zb"]), (gb["x2"], z_axis(gb["x2"])), (gb["x1"], z_axis(gb["x1"]))]
-    A.prism(gp, "xz", Bs / 2, Bs / 2 + 5, "#9ca3af", 0.9, dz=dz)
-    A.prism(gp, "xz", -Bs / 2 - 5, -Bs / 2, "#9ca3af", 0.45, dz=dz)
+    A.prism(gp, "xz", Bs / 2, Bs / 2 + 5, "#9ca3af", 0.9, dz=dz, layer=2)
+    A.prism(gp, "xz", -Bs / 2 - 5, -Bs / 2, "#9ca3af", 0.45, dz=dz, layer=2)
     # стрелка установки
     A.line((-120, 0, zpt + dz - 20), (-120, 0, zpt + 25),
            'stroke="#dc2626" stroke-width="2.5" stroke-dasharray="8 5" marker-end="url(#arr)"')
