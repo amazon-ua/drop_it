@@ -164,6 +164,7 @@ class Scheme:
     apex_z: float | None = None      # 3 рамы: цеховая боковая ферма — отметка пересечения осей раскосов
                                      # под опорным столиком (None — раскосы сходятся на оси затяжки)
     ridge_row_group: str = "lath"
+    eave_row_group: str = "lath"     # карнизные обрешётины (первые от карниза) — своя группа, напр. "le"
     groups: dict = field(default_factory=dict)   # группа -> Section
 
     def copy(self, **kw):
@@ -180,6 +181,8 @@ GROUP_INFO = {
     "knee": ("Подкосы колонна→затяжка", "web"),
     "lath": ("Обрешётка", "beam"),
     "ge": ("Торцевая обвязка обрешётки", "beam"),
+    "le": ("Карнизные обрешётины", "beam"),
+    "lr": ("Коньковая обрешётина", "beam"),
     "gk": ("Подкосы торцевой обвязки", "web"),
     "gd": ("Диагонали по скатам к углам обрешётки", "beam"),
     "ls": ("Нижние подкосы консолей обрешётки", "web"),
@@ -414,8 +417,13 @@ def build(sc: Scheme):
 
     # --- обрешётка (неразрезная по рамам, консоли на концах)
     ys = sorted(set([Y_MIN, Y_MAX] + frames_y))
+    x_eaves = (min(r[0] for r in rows), max(r[0] for r in rows))
     for (x, z, trib, side) in rows:
         g = "lath"
+        if side == "ridge":
+            g = sc.ridge_row_group
+        elif abs(x - x_eaves[0]) < 1e-6 or abs(x - x_eaves[1]) < 1e-6:
+            g = sc.eave_row_group
         zdir = np.array([-SIN, 0, COS]) if x < X_RIDGE - 1e-6 else (
             np.array([SIN, 0, COS]) if x > X_RIDGE + 1e-6 else np.array([0, 0, 1.0]))
         pc = b.new_piece(g, x=x)

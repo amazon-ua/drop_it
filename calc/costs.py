@@ -110,7 +110,7 @@ def quantities(model, sc, stock_len=None):
                 pass
         # пересечения (обрешётка по стропилам, связи по обрешётке): узлы внутри детали
         inner = [n for n, c in cnt.items() if c > 1]
-        if p["group"] in ("lath", "xb"):
+        if p["group"] in ("lath", "le", "lr", "xb"):
             for n in inner:
                 if node_pieces[n] - {pid}:
                     n_cross += 1
