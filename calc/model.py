@@ -154,6 +154,9 @@ class Scheme:
     edge_d: float = 0.25             # 5 ферм: крайние фермы — на столько внутрь от кромок кровли, м
     edge_groups: bool = True         # 5 ферм: у крайних ферм свои (облегчённые) сечения
     spr_zb: float = 2.10             # 5 ферм: нижний узел шпренгеля под продольной балкой
+    gable_edge: bool = False         # торцевая обвязка под обрешётинами у передней и задней кромки
+    ge_d: float = 0.175              # отступ обвязки от кромки кровли, м
+    ge_knee: bool = True             # подкосы обвязки от колонн (в плоскости рядов колонн)
     apex_z: float | None = None      # 3 рамы: цеховая боковая ферма — отметка пересечения осей раскосов
                                      # под опорным столиком (None — раскосы сходятся на оси затяжки)
     ridge_row_group: str = "lath"
@@ -172,6 +175,8 @@ GROUP_INFO = {
     "strut": ("Подкосы фермы", "web"),
     "knee": ("Подкосы колонна→затяжка", "web"),
     "lath": ("Обрешётка", "beam"),
+    "ge": ("Торцевая обвязка обрешётки", "beam"),
+    "gk": ("Подкосы торцевой обвязки", "web"),
     "sd": ("Раскосы боковой фермы", "web"),
     "sb": ("Нижний пояс боковой фермы", "main"),
     "st": ("Верхний пояс боковой фермы / обвязка", "main"),
@@ -400,6 +405,8 @@ def build(sc: Scheme):
             np.array([SIN, 0, COS]) if x > X_RIDGE + 1e-6 else np.array([0, 0, 1.0]))
         pc = b.new_piece(g, x=x)
         extra = [yb for br in braces for yb in [brace_y_at(br, x)] if yb is not None]
+        if sc.gable_edge:
+            extra += [Y_MIN + sc.ge_d, Y_MAX - sc.ge_d]
         for y1, y2 in zip(ys[:-1], ys[1:]):
             cant = (y1 == Y_MIN or y2 == Y_MAX)
             pts_y = [y1] + sorted(y for y in extra if y1 + 1e-6 < y < y2 - 1e-6) + [y2]
@@ -409,6 +416,24 @@ def build(sc: Scheme):
                 fine += [a_ + (b_ - a_) * (k + 1) / n for k in range(n)]
             b.add_member([(x, y, z) for y in fine], g, zdir, piece=pc, nsub=1, kind="lath",
                          cant=cant, trib=trib, side=side, span=y2 - y1)
+    if sc.gable_edge:
+        # торцевая обвязка: поперечный стержень под обрешётинами, в ge_d от передней и задней кромки,
+        # по скату от карниза до конька (прямая по скату); подкосы — от колонн в плоскости рядов колонн
+        # к обвязке над рядом колонн
+        for yy in (Y_MIN + sc.ge_d, Y_MAX - sc.ge_d):
+            for left in (True, False):
+                sl = sorted((x, z) for (x, z, trib, side) in rows
+                            if (x <= X_RIDGE + 1e-6 if left else x >= X_RIDGE - 1e-6))
+                if len(sl) < 2:
+                    continue
+                xc = 0.0 if left else SPAN
+                zc = float(np.interp(xc, [p[0] for p in sl], [p[1] for p in sl]))
+                pts = sorted(set([(x, yy, z) for x, z in sl] + ([(xc, yy, zc)] if sc.ge_knee else [])))
+                zdir = np.array([-SIN, 0, COS]) if left else np.array([SIN, 0, COS])
+                b.add_member(pts, "ge", zdir, piece=b.new_piece("ge", y=yy), nsub=1, kind="ge")
+                if sc.ge_knee:
+                    yc = 0.0 if yy < BAY / 2 else BAY
+                    b.add_member([(xc, yc, sc.side_zb), (xc, yy, zc)], "gk", (1, 0, 0), nsub=2, kind="gk")
     for br in braces:
         (x1, y1), (x2, y2) = br
         xs_c = sorted(set([x1, x2] + [r[0] for r in rows if min(x1, x2) < r[0] < max(x1, x2)]))

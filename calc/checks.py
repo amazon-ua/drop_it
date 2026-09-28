@@ -431,8 +431,8 @@ class Analysis:
                 e = m.elems[ei]
                 node_members[e.n1].add(mid)
                 node_members[e.n2].add(mid)
-        chord_kinds = {"rafter", "tie", "col", "eave", "sb", "st", "lb"}
-        brace_kinds = {"strut", "kp", "knee", "sd", "kl", "sb", "spd", "spp"}
+        chord_kinds = {"rafter", "tie", "col", "eave", "sb", "st", "lb", "ge"}
+        brace_kinds = {"strut", "kp", "knee", "sd", "kl", "sb", "spd", "spp", "gk"}
         gusset_nodes = self.gusset_nodes()
         res = {}
         for mid, mm in m.members.items():
