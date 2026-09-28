@@ -16,7 +16,7 @@ import model as M
 from baseline import baseline_scheme
 from drawing import build_html
 import tile_layout
-from report_data import (PLATES, bar_plan, cutting_plan, fab_details, member_table, piece_list,
+from report_data import (PLATES, bar_plan, cutting_plan, fab_details, member_table, offcut_free, piece_list,
                          scheme_from_result)
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -63,7 +63,7 @@ def main():
     sc = scheme_from_result(best)
     an = analyse(sc)
     pieces, q = piece_list(an.model, sc)
-    est = K.estimate(q, cal)
+    est = K.estimate(q, cal, free=offcut_free(fab_details(an.model, sc)[0]))   # минус обрезки заказчика
     mt = member_table(an)
     plan = cutting_plan(pieces)
     # --- чувствительность
@@ -175,7 +175,8 @@ def main():
     rows = []
     for secname, p in bplan.items():
         for i, b in enumerate(p["bars"], 1):
-            rows.append([f"□{secname}", f"{i} ({b['stock']:.0f} м)", " + ".join(f"{L:.3f}" for L, _ in b["cuts"]),
+            lab = f"обрезок {b['stock']:.2f} м" if p.get("offcut") else f"{i} ({b['stock']:.0f} м)"
+            rows.append([f"□{secname}", lab, " + ".join(f"{L:.3f}" for L, _ in b["cuts"]),
                          "; ".join(sorted(set(nm for _, nm in b["cuts"]))), round(b["free"], 3)])
     sheet("Раскрой на хлысты", ["Профиль", "Хлыст №", "Резы, м", "Заготовки", "Остаток, м"], rows,
           [14, 8, 44, 60, 10])
@@ -277,6 +278,13 @@ def main():
     for name, d in sorted(est["by_sec"].items(), key=lambda kv: -kv[1]["cost"]):
         w(f"| □{name} | {d['L']:.2f} | {d['kg']:.1f} | {d['sec'].price:g} | {fmt(d['cost'])} |")
     w(f"| **Итого трубы** | | | | **{fmt(est['pipes'])}** |\n")
+    offd = [d for d in details if d.get("offcut")]
+    if offd:
+        w("Из обрезков заказчика 60×60×3 (2.80, 2.70, 2.05, 1.74 м; не покупаются, в таблице уже вычтены): "
+          + "; ".join(f"{d['name'].replace(' — из обрезка заказчика', '')} {d['L']:.3f} м × {d['n']}" for d in offd)
+          + ". Раскосы и коньковая обрешётина из 60×60×3 вместо 60×60×2 — размеры и резы те же; расчёт с 60×60×3 "
+          "в этих группах: максимум 0.96, раскосы 0.59, узлы ≤ 0.58. Обрезки 50×50×2 и 80×40×2.5 в конструкцию не "
+          "подходят (80×40 — как ровная полка для сборки стыков обрешётин).\n")
     w("## Металлочерепица: раскладка и подрезка\n")
     w("Схема — в `output/navis_optimized.html`. Листы кладутся перпендикулярно карнизу, от переднего края (дорога) "
       "к заднему; из-за косины 2.87° передний и задний края кровли идут наискось — крайние листы подрезаются по косой.\n")

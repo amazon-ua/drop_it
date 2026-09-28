@@ -121,7 +121,8 @@ def main():
         if tag == "Ch0.70":
             an_main = an
     q = K.quantities(an_main.model, sc)
-    est = K.estimate(q, cal)
+    from report_data import fab_details, offcut_free
+    est = K.estimate(q, cal, free=offcut_free(fab_details(an_main.model, sc)[0]))   # минус обрезки заказчика
     from installer_check import installer_check
     inst = installer_check(an_main.model, groups=("lath", "le", "lr", "ge"), margin=0.40)   # к кромкам ближе 0.4 м не подходить
     r.update(total=est["total"], pipes=est["pipes"], mass=q["mass"], frame_part=est["frame_part"],

@@ -272,16 +272,18 @@ def build_html(an, sc, title, notes, details, plan, plates, q, details_split=Non
     grp_of = {d["name"]: d["group"] for d in list(details) + list(details_split or [])}
     need_by_sec = {}
     for d in details:
-        need_by_sec[d["sec"].name] = need_by_sec.get(d["sec"].name, 0.0) + d["L"] * d["n"]
+        if not d.get("offcut"):
+            need_by_sec[d["sec"].name] = need_by_sec.get(d["sec"].name, 0.0) + d["L"] * d["n"]
     blocks = []
     srow = []
     tot_need = tot_buy = 0.0
     n6 = n12 = 0
     scale_len = max(b["stock"] for p in plan.values() for b in p["bars"])
-    for sn, p in sorted(plan.items(), key=lambda kv: -kv[1]["need"] * kv[1]["sec"].price):
+    for sn, p in sorted(plan.items(), key=lambda kv: (kv[1].get("offcut", False), -kv[1]["need"] * kv[1]["sec"].price)):
         bars = p["bars"]
-        need_m = need_by_sec.get(sn, p["need"])
-        short = p["need"] < 1.0
+        off = p.get("offcut", False)
+        need_m = 0.0 if off else need_by_sec.get(sn, p["need"])
+        short = p["need"] < 1.0 and not off
         pat = {}
         for b in bars:
             key = (b["stock"],) + tuple((round(L, 3), nm) for L, nm in b["cuts"])
@@ -297,7 +299,11 @@ def build_html(an, sc, title, notes, details, plan, plates, q, details_split=Non
             for L, nm, g in cuts:
                 names[(nm, L)] = names.get((nm, L), 0) + 1
             desc = "; ".join(f"{nm} {L:.3f}" + (f" × {k}" if k > 1 else "") for (nm, L), k in names.items())
-            if short:
+            if off:
+                rows_html.append(f'<div class="bl"><div class="bh">обрезок {stock:.2f} м</div>'
+                                 f'{_bar_svg(cuts, free, stock, COLORS, scale_len)}'
+                                 f'<div class="bd">{html.escape(desc) if desc else "не нужен — остаётся"}</div></div>')
+            elif short:
                 rows_html.append(f'<div class="bl"><div class="bh">покупать отрезком ≈ {p["need"] + 0.02:.2f} м '
                                  f'(хлыст не нужен)</div><div class="bd">{html.escape(desc)}</div></div>')
             else:
@@ -305,19 +311,24 @@ def build_html(an, sc, title, notes, details, plan, plates, q, details_split=Non
                 rows_html.append(f'<div class="bl"><div class="bh"><b>× {cnt}</b> {word} {stock:.0f} м</div>'
                                  f'{_bar_svg(cuts, free, stock, COLORS, scale_len)}<div class="bd">{html.escape(desc)}</div></div>')
         buy = p["need"] + 0.02 if short else p["buy"]
-        if not short:
+        if not short and not off:
             n6 += c6
             n12 += c12
         tot_need += need_m
         tot_buy += buy
-        bars_txt = "отрезок" if short else " + ".join(t for t in (f"{c12}×12 м" if c12 else "", f"{c6}×6 м" if c6 else "") if t)
-        srow.append(f'<tr><td>□{html.escape(sn)}</td><td class="n">{need_m:.2f}</td>'
-                    f'<td class="n">{need_m * p["sec"].price:,.0f}</td>'.replace(",", "\u202f")
-                    + f'<td>{bars_txt}</td><td class="n">{buy:.2f}</td>'
-                    f'<td class="n">{buy * p["sec"].price:,.0f}</td></tr>'.replace(",", "\u202f"))
+        bars_txt = "свои обрезки, не покупать" if off else "отрезок" if short else " + ".join(t for t in (f"{c12}×12 м" if c12 else "", f"{c6}×6 м" if c6 else "") if t)
+        if off:
+            srow.append(f'<tr><td>□{html.escape(sn)}</td><td class="n">{p["need"]:.2f}</td><td class="n">0</td>'
+                        f'<td>{bars_txt}</td><td class="n">—</td><td class="n">0</td></tr>')
+        else:
+            srow.append(f'<tr><td>□{html.escape(sn)}</td><td class="n">{need_m:.2f}</td>'
+                        f'<td class="n">{need_m * p["sec"].price:,.0f}</td>'.replace(",", "\u202f")
+                        + f'<td>{bars_txt}</td><td class="n">{buy:.2f}</td>'
+                        f'<td class="n">{buy * p["sec"].price:,.0f}</td></tr>'.replace(",", "\u202f"))
         blocks.append(f'<h3>□{html.escape(sn)} — {bars_txt}</h3>' + "".join(rows_html))
-    cost_m = sum(d["L"] * d["n"] * d["sec"].price for d in details)
-    cost_b = sum((p["need"] + 0.02 if p["need"] < 1 else p["buy"]) * p["sec"].price for p in plan.values())
+    cost_m = sum(d["L"] * d["n"] * d["sec"].price for d in details if not d.get("offcut"))
+    cost_b = sum((p["need"] + 0.02 if p["need"] < 1 else p["buy"]) * p["sec"].price for p in plan.values()
+                 if not p.get("offcut"))
     srow.append(f'<tr><td><b>Итого</b></td><td class="n"><b>{tot_need:.2f}</b></td><td class="n"><b>{_n(cost_m)}</b></td>'
                 f'<td><b>{_bars_txt(n12, n6)}</b></td><td class="n"><b>{tot_buy:.2f}</b></td>'
                 f'<td class="n"><b>{_n(cost_b)}</b></td></tr>')

@@ -123,7 +123,7 @@ LATH_INSERT = "30×30×2"
 LATH_NAMES = {"lath": "Обрешётина", "le": "Карнизная обрешётина (на ребро)", "lr": "Коньковая обрешётина"}
 
 
-def fab_details(model, sc, lath_split=False):
+def fab_details(model, sc, lath_split=False, offcuts=True):
     """Список заготовок: name, group, sec, L (длина реза, м), n, cuts (описание торцов).
 
     Длины — «в чистоте» по узлам из output/uzly.html (затяжка между гранями колонн, раскос — от грани
@@ -201,9 +201,47 @@ def fab_details(model, sc, lath_split=False):
             add(M.GROUP_INFO[grp][0], grp, sec, L, 1, "")
     order = list(M.GROUP_INFO)
     out.sort(key=lambda d: (order.index(d["group"]), d["name"], -d["L"]))
+    if offcuts:
+        out = apply_offcuts(out)
     for d in out:
         d["mass"] = d["sec"].mass * d["L"] * d["n"]
     return out, q
+
+
+# Обрезки заказчика с прошлого объекта (28.09): 60×60×3 — 2.80, 2.70, 2.05, 1.74 м. Из них — детали, где 60×60×3
+# заменяет 60×60×2 (размеры и резы те же, стенка толще; проверено расчётом с 60×60×3 в этих группах: максимум
+# 0.96, раскосы 0.59, узлы ≤ 0.58), и стойки-вставки (они и так 60×60×3). 50×50×2 и 80×40×2.5 не подходят.
+CUSTOMER_OFFCUTS = {"60×60×3": [2.80, 2.70, 2.05, 1.74]}
+OFFCUT_USE = [
+    # (начало названия детали, сколько штук, сечение из обрезка)
+    ("Раскос боковой фермы", 2, "60×60×3"),                          # оба раскоса одной фермы
+    ("Коньковая обрешётина, часть 2", 1, "60×60×3"),
+    ("Стойка-вставка", 2, "60×60×3"),
+]
+OFFCUT_TAG = " — из обрезка заказчика"
+
+
+def apply_offcuts(details):
+    """Отделить детали, которые режутся из обрезков заказчика (offcut=True, orig — сечение по проекту)."""
+    out = []
+    for d in details:
+        use = next(((n, sn) for pre, n, sn in OFFCUT_USE if d["name"].startswith(pre)), None)
+        if not use:
+            out.append(d)
+            continue
+        n, sn = use
+        n = min(n, d["n"])
+        if d["n"] > n:
+            out.append(dict(d, n=d["n"] - n))
+        note = "" if sn == d["sec"].name else f"; □{sn} вместо □{d['sec'].name} — размеры и резы те же"
+        out.append(dict(d, name=d["name"] + OFFCUT_TAG, sec=sec_by_name(sn), n=n, offcut=True,
+                        orig=d["sec"], cuts=d["cuts"] + note))
+    return out
+
+
+def offcut_free(details, kerf=K.CUT_ALLOW):
+    """Металл, который не покупается (идёт из обрезков): [(сечение по проекту, длина с пропилом, м)]."""
+    return [(d["orig"].name, (d["L"] + kerf) * d["n"]) for d in details if d.get("offcut")]
 
 
 def _pack(items, k12, stocks, kerf):
@@ -239,11 +277,26 @@ def bar_plan(details, stocks=None, kerf=K.CUT_ALLOW):
     """Раскрой на хлысты 6 и 12 м: по каждому сечению — сочетание с наименьшей длиной закупки."""
     by_sec = defaultdict(list)
     secs = {}
+    off_items = defaultdict(list)
     for d in details:
-        secs[d["sec"].name] = d["sec"]
         for _ in range(d["n"]):
-            by_sec[d["sec"].name].append((d["L"], d["name"]))
+            if d.get("offcut"):
+                off_items[d["sec"].name].append((d["L"], d["name"]))
+            else:
+                secs[d["sec"].name] = d["sec"]
+                by_sec[d["sec"].name].append((d["L"], d["name"]))
+        if d.get("offcut"):
+            secs.setdefault("off:" + d["sec"].name, d["sec"])
     plan = {}
+    for sn, items in off_items.items():
+        # первый подходящий по убыванию, из коротких обрезков — сначала
+        bars = [dict(cuts=[], free=L, stock=L, offcut=True) for L in sorted(CUSTOMER_OFFCUTS[sn])]
+        for L, nm in sorted(items, key=lambda t: -t[0]):
+            b = min((b for b in bars if b["free"] >= L + kerf - 1e-9), key=lambda b: b["free"])
+            b["cuts"].append((L, nm))
+            b["free"] -= L + kerf
+        plan[f"{sn} (обрезки заказчика)"] = dict(sec=secs["off:" + sn], bars=bars, need=sum(L for L, _ in items),
+                                                buy=0.0, offcut=True)
     for sn, items in by_sec.items():
         items.sort(key=lambda t: -t[0])
         stocks_s = stocks or K.bar_lengths(secs[sn])

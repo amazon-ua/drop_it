@@ -161,7 +161,8 @@ def labor_units(q):
             + 0.02 * q["mass"])        # подъём, кантовка, монтаж, кг
 
 
-def metal_cost(q):
+def metal_cost(q, free=None):
+    """free — металл, который не покупается (обрезки заказчика): [(сечение, длина с пропилом, м)]."""
     by_sec = defaultdict(lambda: dict(L=0.0, n=0, kg=0.0, cost=0.0, groups=set()))
     for p in q["pieces"]:
         s = p["sec"]
@@ -173,6 +174,14 @@ def metal_cost(q):
         d["cost"] += L * s.price
         d["groups"].add(p["group"])
         d["sec"] = s
+    for sn, L in (free or []):
+        d = by_sec[sn]
+        L = min(L, d["L"])
+        d["L"] -= L
+        d["kg"] -= L * d["sec"].mass
+        d["cost"] -= L * d["sec"].price
+        if d["L"] < 0.15:                 # сечение целиком из обрезков — не покупается (остаток — разница длин модели)
+            del by_sec[sn]
     pipes = sum(d["cost"] for d in by_sec.values())
     return pipes, dict(by_sec)
 
@@ -190,8 +199,8 @@ class Calibration:
         return (ESTIMATE["Грунт-эмаль (окраска)"][0] + ESTIMATE["Работа: окраска"][0]) / self.area0
 
 
-def estimate(q, cal: Calibration):
-    pipes, by_sec = metal_cost(q)
+def estimate(q, cal: Calibration, free=None):
+    pipes, by_sec = metal_cost(q, free)
     lines = []
     lines.append(("Профильные трубы (по метражу, прайс)", pipes, "metal"))
     lines.append(("Пластины (фасонки, крышки колонн)", q["plate_kg"] * PLATE_PRICE, "metal"))
