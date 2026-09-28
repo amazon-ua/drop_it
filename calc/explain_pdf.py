@@ -9,7 +9,7 @@ OUT = Path(__file__).resolve().parent.parent / "output"
 
 CSS = """
 @page{size:A4;margin:13mm 15mm 15mm 15mm}
-body{font-family:"DejaVu Sans",system-ui,sans-serif;font-size:10.3pt;line-height:1.4;color:#111}
+body{font-family:"DejaVu Sans",system-ui,sans-serif;font-size:10pt;line-height:1.36;color:#111}
 h2{font-size:14pt;margin:18px 0 8px;padding-bottom:3px;border-bottom:1.5px solid #3b0764;color:#1e1b4b}
 h2:first-child{margin-top:0}
 p{margin:6px 0}

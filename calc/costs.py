@@ -80,7 +80,9 @@ def quantities(model, sc, stock_len=None):
         if g == "col":
             # элементы модели идут до оси стропила (+3.10); фактический верх колонны — под опорной
             # пластиной (+3.043); плюс заделка в бетон
-            L += sc.embed - (M.Z_NODE - M.Z_COL_TOP)
+            meta_e = M.col_embed(sc, meta["x"], meta["y"])
+            L += meta_e - (M.Z_NODE - M.Z_COL_TOP)
+            meta = dict(meta, embed=meta_e)
         pieces.append(dict(id=pid, group=g, sec=sec, L=L, meta=meta))
     # сварные соединения: концы деталей, примыкающие к другим деталям
     node_pieces = defaultdict(set)
@@ -143,12 +145,13 @@ def quantities(model, sc, stock_len=None):
     for p in pieces:
         Lp = p["L"]
         if p["group"] == "col":
-            Lp = p["L"] - 0.5 * sc.embed
+            Lp = p["L"] - 0.5 * p["meta"].get("embed", sc.embed)
         area += p["sec"].perim * Lp
     area += plate_kg / 7850 / 0.005 * 2 * 0.5
     mass = sum(p["sec"].mass * p["L"] for p in pieces) + plate_kg
     return dict(pieces=pieces, weld_len=weld_len, n_joints=n_joints, n_cross=n_cross,
-                n_splice=n_splice, n_cuts=n_cuts, plate_kg=plate_kg, area=area, mass=mass)
+                n_splice=n_splice, n_cuts=n_cuts, plate_kg=plate_kg, area=area, mass=mass,
+                hole_rebar=getattr(sc, "hole_rebar", True))
 
 
 def labor_units(q):
@@ -208,6 +211,8 @@ def estimate(q, cal: Calibration, free=None):
     for name, (val, kind) in ESTIMATE.items():
         if kind == "const" or kind == "roof":
             v = val
+            if name == "Арматура для лунок" and not q.get("hole_rebar", True):
+                v = 0.0            # колонна на всю глубину лунки — сама армирует бетонный столб
         elif kind == "area":
             v = val * q["area"] / cal.area0
         elif kind == "weld":

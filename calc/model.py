@@ -51,6 +51,13 @@ def z_base(x, y):
 
 def column_name(x, y):
     return COLUMN_BASES[(round(x, 2), round(y, 2))][0]
+
+
+def col_embed(sc, x, y):
+    """Заделка колонны в бетон, м: постоянная (sc.embed) или на всю глубину лунки минус зазор над дном."""
+    if getattr(sc, "embed_gap", None) is None:
+        return sc.embed
+    return COLUMN_BASES[(round(x, 2), round(y, 2))][2] - sc.embed_gap
 CORRIDOR_X = (0.40, 4.40)
 CORRIDOR_H = 2.90
 LATH_PITCH = 0.35
@@ -150,6 +157,8 @@ class Scheme:
     roof_x: bool = True              # связи-кресты по скатам
     base: str = "spring"             # 'spring' — упругая заделка в лунке, 'pin' — шарнир
     embed: float = 1.25              # заделка колонны в бетон, м
+    embed_gap: float | None = None   # если задано — колонна на всю глубину лунки, низ на embed_gap выше дна
+    hole_rebar: bool = True          # армирование лунок (каркас из арматуры)
     skew: float = SKEW               # косина площадки (0 — прямоугольник)
     edge_d: float = 0.25             # 5 ферм: крайние фермы — на столько внутрь от кромок кровли, м
     edge_groups: bool = True         # 5 ферм: у крайних ферм свои (облегчённые) сечения

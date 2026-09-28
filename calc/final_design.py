@@ -106,6 +106,7 @@ def main():
     secs = {g: sec_by_name(n) for g, n in groups.items()}
     tg = M.shop_truss_geom(secs["col"].b, secs["sb"].h, secs["sd"].h)
     r["params"] = dict(r["params"], apex_z=round(tg["apex_z"], 4), gable_edge=True, ge_d=0.175, ge_knee=False,
+                       embed_gap=0.10, hole_rebar=False,
                        eave_row_group="le", ridge_row_group="lr")
     sc = scheme_from_result(r)
     base = baseline_scheme()

@@ -146,7 +146,9 @@ def fab_details(model, sc, lath_split=False, offcuts=True):
         if grp == "col":
             nm = M.column_name(meta["x"], meta["y"])
             add(f"Колонна {nm}", grp, sec, L, 1,
-                f"низ — прямой рез (+ заглушка), верх — под {slope:.0f}° по низу стропила; в бетоне {sc.embed:.2f} м")
+                f"низ — прямой рез (+ заглушка), верх — под {slope:.0f}° по низу стропила; в бетоне "
+                f"{meta.get('embed', sc.embed):.2f} м" + (f" (на всю глубину лунки, низ на {sc.embed_gap * 100:.0f} см "
+                                                           f"выше дна)" if sc.embed_gap is not None else ""))
         elif grp == "raf":
             add("Стропило " + ("короткое (свес 0.40)" if meta.get("side") == "L" else "длинное (свес 0.90)"),
                 grp, sec, L, 1,
