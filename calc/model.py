@@ -157,6 +157,8 @@ class Scheme:
     gable_edge: bool = False         # торцевая обвязка под обрешётинами у передней и задней кромки
     ge_d: float = 0.175              # отступ обвязки от кромки кровли, м
     ge_knee: bool = True             # подкосы обвязки от колонн (в плоскости рядов колонн)
+    gable_diag: bool = False         # диагонали по скатам: конёк крайней рамы → дальний угол обрешётки
+    gd_knee: bool = False            # подкосы диагоналей от колонн (в плоскости рядов колонн)
     apex_z: float | None = None      # 3 рамы: цеховая боковая ферма — отметка пересечения осей раскосов
                                      # под опорным столиком (None — раскосы сходятся на оси затяжки)
     ridge_row_group: str = "lath"
@@ -177,6 +179,7 @@ GROUP_INFO = {
     "lath": ("Обрешётка", "beam"),
     "ge": ("Торцевая обвязка обрешётки", "beam"),
     "gk": ("Подкосы торцевой обвязки", "web"),
+    "gd": ("Диагонали по скатам к углам обрешётки", "beam"),
     "sd": ("Раскосы боковой фермы", "web"),
     "sb": ("Нижний пояс боковой фермы", "main"),
     "st": ("Верхний пояс боковой фермы / обвязка", "main"),
@@ -391,6 +394,14 @@ def build(sc: Scheme):
             braces.append(((x_e, 0.0), (X_RIDGE, BAY)))
             braces.append(((x_e, BAY), (X_RIDGE, 0.0)))
 
+    # диагонали по скатам: от конька крайней рамы к дальнему углу обрешётки (передний и задний свес)
+    diags = []
+    if sc.gable_diag:
+        x_eaves = (min(r[0] for r in rows), max(r[0] for r in rows))
+        for yf, ye in ((0.0, Y_MIN), (BAY, Y_MAX)):
+            for x_e in x_eaves:
+                diags.append(((X_RIDGE, yf), (x_e, ye)))
+
     def brace_y_at(br, x):
         (x1, y1), (x2, y2) = br
         if min(x1, x2) - 1e-9 <= x <= max(x1, x2) + 1e-9 and abs(x2 - x1) > 1e-9:
@@ -404,7 +415,7 @@ def build(sc: Scheme):
         zdir = np.array([-SIN, 0, COS]) if x < X_RIDGE - 1e-6 else (
             np.array([SIN, 0, COS]) if x > X_RIDGE + 1e-6 else np.array([0, 0, 1.0]))
         pc = b.new_piece(g, x=x)
-        extra = [yb for br in braces for yb in [brace_y_at(br, x)] if yb is not None]
+        extra = [yb for br in braces + diags for yb in [brace_y_at(br, x)] if yb is not None]
         if sc.gable_edge:
             extra += [Y_MIN + sc.ge_d, Y_MAX - sc.ge_d]
         for y1, y2 in zip(ys[:-1], ys[1:]):
@@ -434,6 +445,18 @@ def build(sc: Scheme):
                 if sc.ge_knee:
                     yc = 0.0 if yy < BAY / 2 else BAY
                     b.add_member([(xc, yc, sc.side_zb), (xc, yy, zc)], "gk", (1, 0, 0), nsub=2, kind="gk")
+    for br in diags:
+        (x1, y1), (x2, y2) = br
+        xk = 0.0 if x2 < X_RIDGE else SPAN                    # над рядом колонн — точка подкоса
+        xs_c = sorted(set([x1, x2] + [r[0] for r in rows if min(x1, x2) < r[0] < max(x1, x2)]
+                          + ([xk] if sc.gd_knee else [])), reverse=x2 < x1)
+        pts = [(x, brace_y_at(br, x), z_rafter(x)) for x in xs_c]
+        zdir = np.array([-SIN, 0, COS]) if x2 < X_RIDGE else np.array([SIN, 0, COS])
+        b.add_member(pts, "gd", zdir, piece=b.new_piece("gd"), nsub=1, kind="gd")
+        if sc.gd_knee:
+            yc = 0.0 if y1 < BAY / 2 else BAY
+            b.add_member([(xk, yc, sc.side_zb), (xk, brace_y_at(br, xk), z_rafter(xk))], "gk", (1, 0, 0),
+                         nsub=2, kind="gk")
     for br in braces:
         (x1, y1), (x2, y2) = br
         xs_c = sorted(set([x1, x2] + [r[0] for r in rows if min(x1, x2) < r[0] < max(x1, x2)]))
