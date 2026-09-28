@@ -284,6 +284,10 @@ class Analysis:
                         Lz = max(math.pi * math.sqrt(E * sec.Iz / (lam * Nref)), L)
                     else:
                         Ly = max(math.pi * math.sqrt(E * sec.Iy / (lam * Nref)), L)
+            if mm.get("kind") == "ge":
+                # торцевая обвязка приварена к каждой обрешётине: из плоскости ската (ось Iz — в плоскости b,
+                # b лежит в плоскости ската) она раскреплена обрешётинами — расчётная длина равна их шагу
+                Lz = min(Lz, max(m.elems[ei].L for ei in mm["elems"]))
             res[mid] = (Ly, Lz, alpha1)
         return res, alpha1
 
