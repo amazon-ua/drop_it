@@ -295,6 +295,7 @@ def bar_plan(details, stocks=None, kerf=K.CUT_ALLOW):
             b = min((b for b in bars if b["free"] >= L + kerf - 1e-9), key=lambda b: b["free"])
             b["cuts"].append((L, nm))
             b["free"] -= L + kerf
+        bars = [b for b in bars if b["cuts"]]         # неиспользованные обрезки в документы не выводим
         plan[f"{sn} (обрезки заказчика)"] = dict(sec=secs["off:" + sn], bars=bars, need=sum(L for L, _ in items),
                                                 buy=0.0, offcut=True)
     for sn, items in by_sec.items():
