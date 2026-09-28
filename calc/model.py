@@ -444,7 +444,8 @@ def build(sc: Scheme):
                 b.add_member(pts, "ge", zdir, piece=b.new_piece("ge", y=yy), nsub=1, kind="ge")
                 if sc.ge_knee:
                     yc = 0.0 if yy < BAY / 2 else BAY
-                    b.add_member([(xc, yc, sc.side_zb), (xc, yy, zc)], "gk", (1, 0, 0), nsub=2, kind="gk")
+                    b.add_member([(xc, yc, sc.side_zb), (xc, yy, zc)], "gk", (1, 0, 0),
+                                 piece=b.new_piece("gk", y=yc), nsub=2, kind="gk")
     for br in diags:
         (x1, y1), (x2, y2) = br
         xk = 0.0 if x2 < X_RIDGE else SPAN                    # над рядом колонн — точка подкоса

@@ -4,7 +4,9 @@
   * колонна 100×50×4 → 100×60×4: фасонки ложатся на колонну, стропило и затяжку в одной плоскости;
   * стойка-вставка средней рамы 70×70×2 → 60×60×3: ширина как у стропила и затяжки;
   * боковая ферма — цеховая: нижний пояс 35×35×2 → 60×60×2 (раскос 60 ложится на пояс 60),
-    раскосы сходятся под опорным столиком, на который встаёт стойка-вставка средней рамы.
+    раскосы сходятся под опорным столиком, на который встаёт стойка-вставка средней рамы;
+  * торцевая обвязка под обрешёткой у передней и задней кромки с подкосами от колонн — чтобы консоли
+    обрешётки выдерживали сосредоточенную нагрузку монтажника (ДБН В.1.2-2, п. 6.10).
 Результат — output/final_design.json, усилия в узлах — output/node_forces.json.
 """
 from __future__ import annotations
@@ -22,6 +24,9 @@ from report_data import scheme_from_result, sec_by_name
 from run_opt import OUT
 
 OVERRIDES = {"col": "100×60×4", "stub": "60×60×3", "sb": "60×60×2"}
+# торцевая обвязка под обрешёткой в 0.175 м от передней и задней кромки + подкосы от колонн
+# (проверка на сосредоточенную нагрузку монтажника, ДБН В.1.2-2 п. 6.10)
+EDGE = {"ge": "60×60×2", "gk": "30×30×2"}
 
 
 def node_forces(an, sc):
@@ -78,6 +83,11 @@ def node_forces(an, sc):
                     upd("Б_раскос_боковой_фермы", f)
                 if k == "stub_low" and near(p1, (xc, yb, apex_z)):
                     upd("Б_стойка_на_столике", f)
+            # узел Г: торцевая обвязка и её подкос
+            if k == "gk":
+                upd("Г_подкос", f)
+            if k == "ge":
+                upd("Г_обвязка", f)
     # узлы труба-к-грани из общего расчёта
     for key, jr in an.joint_results.items():
         name = f"узел_{jr['brace']}→{jr['chord']}"
@@ -91,10 +101,11 @@ def main():
     r = dict(res[0])
     groups = dict(r["groups"])
     groups.update(OVERRIDES)
+    groups.update(EDGE)
     r["groups"] = groups
     secs = {g: sec_by_name(n) for g, n in groups.items()}
     tg = M.shop_truss_geom(secs["col"].b, secs["sb"].h, secs["sd"].h)
-    r["params"] = dict(r["params"], apex_z=round(tg["apex_z"], 4))
+    r["params"] = dict(r["params"], apex_z=round(tg["apex_z"], 4), gable_edge=True, ge_d=0.175, ge_knee=True)
     sc = scheme_from_result(r)
     base = baseline_scheme()
     an_b = C.Analysis(base, M.Loads()).run_all()
@@ -110,9 +121,12 @@ def main():
             an_main = an
     q = K.quantities(an_main.model, sc)
     est = K.estimate(q, cal)
+    from installer_check import installer_check
+    inst = installer_check(an_main.model)
     r.update(total=est["total"], pipes=est["pipes"], mass=q["mass"], frame_part=est["frame_part"],
-             util=out["Ch0.70"], util_ch04=out["Ch0.40"], overrides=OVERRIDES, refined=True,
-             label=r["label"])
+             util=out["Ch0.70"], util_ch04=out["Ch0.40"], overrides=dict(OVERRIDES, **EDGE), refined=True,
+             label=r["label"] + ", торцевая обвязка с подкосами",
+             installer={str(k): round(v[0], 3) for k, v in inst.items()})
     (OUT / "final_design.json").write_text(json.dumps(r, ensure_ascii=False, indent=1))
     nf = node_forces(an_main, sc)
     (OUT / "node_forces.json").write_text(json.dumps(nf, ensure_ascii=False, indent=1))
