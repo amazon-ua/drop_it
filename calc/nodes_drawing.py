@@ -490,13 +490,58 @@ class Axo:
         self.labels.append((p, side, yf, text, cls))
 
     def line(self, p, q, style):
-        self.lines.append((p, q, style))
+        self.lines.append((p, q, style, "line"))
 
     def seam(self, pts, closed=False):
-        """Сварной шов — толстая тёмно-фиолетовая линия (поверх граней)."""
+        """Сварной шов — толстая тёмно-фиолетовая линия; рисуются только видимые участки
+        (закрытые непрозрачными деталями — стропилом, стойкой и т. п. — не показываются)."""
         pts = list(pts) + ([pts[0]] if closed else [])
         for p, q in zip(pts[:-1], pts[1:]):
-            self.lines.append((p, q, f'stroke="{SEAM}" stroke-width="4.5" stroke-linecap="round"'))
+            self.lines.append((p, q, f'stroke="{SEAM}" stroke-width="4.5" stroke-linecap="round"', "seam"))
+
+    def _hidden(self, p, faces):
+        """Точка p закрыта от зрителя непрозрачной гранью (луч к зрителю пересекает грань)."""
+        import numpy as np
+        for f, nrm, d0 in faces:
+            den = float(nrm @ self.e)
+            if abs(den) < 1e-9:
+                continue
+            t = (d0 - float(nrm @ p)) / den
+            if t <= 2.0:                       # грань за точкой или сама точка на грани (шов на кромке)
+                continue
+            x = p + t * self.e
+            # точка внутри выпуклого многоугольника грани
+            sgn = 0
+            inside = True
+            for i in range(len(f)):
+                a, b = f[i], f[(i + 1) % len(f)]
+                c = float(np.cross(b - a, x - a) @ nrm)
+                if abs(c) < 1e-6:
+                    continue
+                if sgn == 0:
+                    sgn = 1 if c > 0 else -1
+                elif (c > 0) != (sgn > 0):
+                    inside = False
+                    break
+            if inside:
+                return True
+        return False
+
+    def _visible_runs(self, p, q, faces, n=60):
+        import numpy as np
+        p, q = np.asarray(p, float), np.asarray(q, float)
+        ts = np.linspace(0, 1, n + 1)
+        vis = [not self._hidden(p + t * (q - p), faces) for t in ts]
+        runs, start = [], None
+        for i, v in enumerate(vis):
+            if v and start is None:
+                start = i
+            if (not v or i == n) and start is not None:
+                end = i if v else i - 1
+                if end > start:
+                    runs.append((p + ts[start] * (q - p), p + ts[end] * (q - p)))
+                start = None
+        return runs
 
     def svg(self, aria):
         pts = [self.pr(v) for _, _, f, *_ in self.faces for v in f]
@@ -512,9 +557,19 @@ class Axo:
             s_ = " ".join(f"{P(v)[0]:.1f},{P(v)[1]:.1f}" for v in f)
             o.append(f'<polygon points="{s_}" fill="{fill}" fill-opacity="{op:.2f}" stroke="#111" stroke-opacity="0.55" '
                      f'stroke-width="0.7" style="filter:brightness({shade:.2f})"/>')
-        for p, q, style in self.lines:
-            a, b = P(p), P(q)
-            o.append(f'<line x1="{a[0]:.1f}" y1="{a[1]:.1f}" x2="{b[0]:.1f}" y2="{b[1]:.1f}" {style}/>')
+        import numpy as np
+        occl = []                                  # непрозрачные грани (прозрачная фасонка швы не закрывает)
+        for _, _, f, _, op, _ in self.faces:
+            if op < 0.8:
+                continue
+            nrm = np.cross(f[1] - f[0], f[2] - f[0])
+            nrm = nrm / np.linalg.norm(nrm)
+            occl.append((f, nrm, float(nrm @ f[0])))
+        for p, q, style, kind in self.lines:
+            segs = self._visible_runs(p, q, occl) if kind == "seam" else [(p, q)]
+            for p_, q_ in segs:
+                a, b = P(p_), P(q_)
+                o.append(f'<line x1="{a[0]:.1f}" y1="{a[1]:.1f}" x2="{b[0]:.1f}" y2="{b[1]:.1f}" {style}/>')
         for p, n in self.marks:
             a = P(p)
             o.append(f'<circle cx="{a[0]:.1f}" cy="{a[1]:.1f}" r="11" class="wm" stroke="#111" stroke-width="0.8"/>'
@@ -556,25 +611,37 @@ def node_B_axo(g, lift=240.0, eye=(-1.0, -0.7, 0.5)):
     cap_t = CAP["t"]
     top = lambda x: z_bot(x, Hr) - cap_t
     dz = lift
+    # слои рамы (от дальних к ближним): дальняя фасонка → стойка, пластина, затяжка → стропило (нависает над
+    # пластиной и затяжкой и закрывает торец пластины) → ближняя фасонка (перед стропилом, прозрачная)
     A.prism([(-Hs / 2, zpt), (Hs / 2, zpt), (Hs / 2, top(Hs / 2)), (-Hs / 2, top(-Hs / 2))], "xz", -Bs / 2, Bs / 2,
-            COL["stub"], dz=dz, layer=2)
+            COL["stub"], dz=dz, layer=3)
     L = CAP["len"] / 2
-    A.prism([(-L, top(-L)), (L, top(L)), (L, z_bot(L, Hr)), (-L, z_bot(-L, Hr))], "xz", -Bs / 2, Bs / 2, COL["plate"], dz=dz, layer=2)
+    A.prism([(-L, top(-L)), (L, top(L)), (L, z_bot(L, Hr)), (-L, z_bot(-L, Hr))], "xz", -Bs / 2, Bs / 2, COL["plate"], dz=dz, layer=3)
     xa, xb = -220, 320
     A.prism([(xa, z_bot(xa, Hr)), (xb, z_bot(xb, Hr)), (xb, z_bot(xb, Hr) + Hr / C12), (xa, z_bot(xa, Hr) + Hr / C12)],
-            "xz", -g["Br"] / 2, g["Br"] / 2, COL["raf"], dz=dz, layer=2)
-    A.box(Hs / 2, 380, -g["Bt"] / 2, g["Bt"] / 2, 3000 - Ht / 2, 3000 + Ht / 2, COL["tie"], dz=dz, layer=2)
+            "xz", -g["Br"] / 2, g["Br"] / 2, COL["raf"], dz=dz, layer=4)
+    A.box(Hs / 2, 380, -g["Bt"] / 2, g["Bt"] / 2, 3000 - Ht / 2, 3000 + Ht / 2, COL["tie"], dz=dz, layer=3)
     gb = gusset_B(g)
     gp = [(gb["x1"], gb["zb"]), (gb["x2"], gb["zb"]), (gb["x2"], z_axis(gb["x2"])), (gb["x1"], z_axis(gb["x1"]))]
     A.prism(gp, "xz", Bs / 2, Bs / 2 + 5, "#9ca3af", 0.9, dz=dz, layer=2)
-    A.prism(gp, "xz", -Bs / 2 - 5, -Bs / 2, "#9ca3af", 0.45, dz=dz, layer=2)
+    A.prism(gp, "xz", -Bs / 2 - 5, -Bs / 2, "#9ca3af", 0.45, dz=dz, layer=5)
     # стрелка установки
     A.line((-120, 0, zpt + dz - 20), (-120, 0, zpt + 25),
            'stroke="#dc2626" stroke-width="2.5" stroke-dasharray="8 5" marker-end="url(#arr)"')
     # швы: 1 — торец затяжки к стойке; 2 — пластина к стропилу; 3 — ближняя фасонка по кромкам;
     # 4 — место шва на столике (объект); 7 — раскосы под столиком (видимая сторона)
     yn = -Bs / 2 - 5
-    A.seam([(-L, -Bs / 2, top(-L) + dz), (-L, -Bs / 2, z_bot(-L, Hr) + dz)])
+    # 2: стойка к опорной пластине — по контуру верха стойки (видны грань −x и, сквозь ближнюю фасонку, грань −y);
+    #    пластина к стропилу — по торцу (виден ближний к зрителю торец)
+    A.seam([(-Hs / 2, Bs / 2, top(-Hs / 2) + dz), (-Hs / 2, -Bs / 2, top(-Hs / 2) + dz),
+            (Hs / 2, -Bs / 2, top(Hs / 2) + dz)])
+    A.seam([(-L, -Bs / 2, z_bot(-L, Hr) + dz), (-L, Bs / 2, z_bot(-L, Hr) + dz)])
+    # 1: торец затяжки к стойке — по контуру (видны боковая грань сквозь ближнюю фасонку и верх)
+    A.seam([(Hs / 2, -g["Bt"] / 2, 3000 - Ht / 2 + dz), (Hs / 2, -g["Bt"] / 2, 3000 + Ht / 2 + dz),
+            (Hs / 2, g["Bt"] / 2, 3000 + Ht / 2 + dz)])
+    # 3: дальняя фасонка — видна её вертикальная кромка у стойки
+    yf_ = Bs / 2 + 5
+    A.seam([(gb["x1"], yf_, gb["zb"] + dz), (gb["x1"], yf_, z_axis(gb["x1"]) + dz)])
     A.seam([(gb["x1"], yn, gb["zb"] + dz), (gb["x1"], yn, z_axis(gb["x1"]) + dz),
             (gb["x2"], yn, z_axis(gb["x2"]) + dz)])
     A.seam([(gb["x2"], yn, 3000 - Ht / 2 + dz), (gb["x2"], yn, 3000 + Ht / 2 + dz)])
@@ -582,7 +649,7 @@ def node_B_axo(g, lift=240.0, eye=(-1.0, -0.7, 0.5)):
             (-Hs / 2, Bs / 2 + 5, zpt)], closed=True)
     A.seam([(-Hd / 2, -foot, zpb), (-Hd / 2, foot, zpb)])
     A.mark((Hs / 2 + 30, -Bs / 2 - 6, 3000 + Ht / 2 + dz), 1)
-    A.mark((-L, -Bs / 2, top(-L) + dz), 2)
+    A.mark((-Hs / 2 - 28, -Bs / 2 - 6, top(-Hs / 2) + dz - 30), 2)       # у видимого участка шва стойки к пластине
     A.mark((150, -Bs / 2 - 6, 2990 + dz), 3)
     A.mark((w / 2, -Lp / 2 + 30, zpt), 4)
     A.mark((0, -foot / 2, zpb - 10), 7)
