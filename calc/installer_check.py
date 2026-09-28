@@ -17,7 +17,8 @@ GF = 1.2
 RY = 230e6
 
 
-def installer_check(model, P=P_CHAR * GF, groups=("lath", "ge")):
+def installer_check(model, P=P_CHAR * GF, groups=("lath", "ge"), margin=0.0):
+    """margin — монтажник не подходит к кромкам кровли ближе margin, м (передняя/задняя кромки и карнизы)."""
     m = model
     S = F.Solver(m)
     uc = M.unit_cases(m, M.Loads())
@@ -31,6 +32,12 @@ def installer_check(model, P=P_CHAR * GF, groups=("lath", "ge")):
             for ei in mm["elems"]:
                 e = m.elems[ei]
                 nodes.update((e.n1, e.n2))
+    if margin > 0:
+        x_lo, x_hi = -M.OVH_L + margin, M.SPAN + M.OVH_R - margin
+        y_lo, y_hi = M.Y_MIN + margin, M.Y_MAX - margin
+        nodes = {n for n in nodes
+                 if x_lo - 1e-6 <= m.nodes[n][0] <= x_hi + 1e-6
+                 and y_lo - 1e-6 <= m.logical_y(m.nodes[n]) <= y_hi + 1e-6}
     A = np.array([e.sec.A for e in m.elems])
     Wy = np.array([e.sec.Wy for e in m.elems])
     Wz = np.array([e.sec.Wz for e in m.elems])

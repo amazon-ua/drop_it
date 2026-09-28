@@ -122,7 +122,7 @@ def main():
     q = K.quantities(an_main.model, sc)
     est = K.estimate(q, cal)
     from installer_check import installer_check
-    inst = installer_check(an_main.model)
+    inst = installer_check(an_main.model, margin=0.40)   # к кромкам кровли ближе 0.4 м не подходить
     r.update(total=est["total"], pipes=est["pipes"], mass=q["mass"], frame_part=est["frame_part"],
              util=out["Ch0.70"], util_ch04=out["Ch0.40"], overrides=dict(OVERRIDES, **EDGE), refined=True,
              label=r["label"] + ", торцевая обвязка с подкосами",

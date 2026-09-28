@@ -422,6 +422,8 @@ def build(sc: Scheme):
         extra = [yb for br in braces + diags for yb in [brace_y_at(br, x)] if yb is not None]
         if sc.gable_edge:
             extra += [Y_MIN + sc.ge_d, Y_MAX - sc.ge_d]
+        # узлы для проверки нагрузки монтажника на границе зоны, куда он не заходит (0.4 м от кромки)
+        extra += [Y_MIN + 0.40, Y_MAX - 0.40]
         for y1, y2 in zip(ys[:-1], ys[1:]):
             cant = (y1 == Y_MIN or y2 == Y_MAX)
             pts_y = [y1] + sorted(y for y in extra if y1 + 1e-6 < y < y2 - 1e-6) + [y2]
