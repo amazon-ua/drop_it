@@ -7,6 +7,7 @@ import math
 import numpy as np
 
 import model as M
+import costs as K
 
 COLORS = {
     "col": "#2563eb", "raf": "#0f766e", "tie": "#b45309", "kp": "#7c3aed", "strut": "#7c3aed",
@@ -163,6 +164,16 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
         dim((0, -0.52), (M.BAY, -0.52), "4.60", 0)
         dim((M.Y_MIN, 4.2), (0, 4.2), "1.18", 0)
         dim((M.BAY, 4.2), (M.Y_MAX, 4.2), "1.20", 0)
+    if view == "plan" and M.Y_MAX - M.Y_MIN > K.max_bar(sc.groups["lath"]) - 0.01:
+        # стыки обрешётин — кружками, у всех на одной линии
+        from report_data import LATH_SPLICE_Y
+        r_ = max(5.0, 0.07 * s)
+        for (x, z, trib, side) in model.rows:
+            c = T(model.phys((x, LATH_SPLICE_Y, 0))[:2])
+            out.append(f'<circle cx="{c[0]:.1f}" cy="{c[1]:.1f}" r="{r_:.1f}" fill="none" stroke="#dc2626" stroke-width="2"/>')
+        a_ = T(model.phys((M.SPAN / 2, M.Y_MAX + 0.38, 0))[:2])
+        out.append(f'<text x="{a_[0]:.1f}" y="{a_[1]:.1f}" class="lev" text-anchor="middle" style="fill:#dc2626">'
+                   f'○ стыки обрешётин ({len(model.rows)} шт.), {(M.BAY - LATH_SPLICE_Y) * 1000:.0f} мм от рамы 3</text>')
     if view == "plan":
         dim((0, M.Y_MIN - 0.15), (M.SPAN, M.Y_MIN - 0.15), "5.45", 0)
         p = T((M.SPAN + 0.1, M.Y_MIN - 0.05))
