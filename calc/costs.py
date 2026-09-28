@@ -18,8 +18,18 @@ import numpy as np
 
 import model as M
 
-STOCK_LEN = 12.0       # наибольшая заготовка без стыка, м (хлысты 12 м: обрешётина 6.98 м — цельная)
+STOCK_LEN = None       # наибольшая заготовка без стыка: по сечению (max_bar), если не задано явно
 BAR_LENGTHS = (6.0, 12.0)   # длины хлыстов в продаже
+BIG_BAR_MIN = 0.070    # хлысты 12 м — только у труб от 70×70 (меньшая сторона ≥ 70 мм); мельче — 6 м
+
+
+def bar_lengths(sec):
+    """Длины хлыстов, в которых продаётся сечение (по данным поставщика: 12 м — от 70×70)."""
+    return (6.0, 12.0) if min(sec.h, sec.b) >= BIG_BAR_MIN - 1e-9 else (6.0,)
+
+
+def max_bar(sec):
+    return max(bar_lengths(sec))
 CUT_ALLOW = 0.003      # пропил на рез, м
 PLATE_PRICE = 55.0     # грн/кг (лист t=4…8; по черновику 9 кг ≈ 500 грн)
 
@@ -52,7 +62,8 @@ ESTIMATE_PIPES = 80460    # трубы по смете xlsx (24 м 100×100×5 +
 def quantities(model, sc, stock_len=None):
     """Детали, длины, массы, площади, швы — по модели.
 
-    stock_len — наибольшая заготовка без стыка (12 м — хлысты 12 м, 6 м — как в черновике)."""
+    stock_len — наибольшая заготовка без стыка; по умолчанию — наибольший хлыст данного сечения
+    (6 м для труб мельче 70×70, 12 м — от 70×70)."""
     stock_len = stock_len or STOCK_LEN
     m = model
     piece_len = defaultdict(float)
@@ -106,7 +117,8 @@ def quantities(model, sc, stock_len=None):
     # стыки обрешётки и других длинных деталей (заготовка ≤ 6 м)
     n_splice = 0
     for p in pieces:
-        k = max(1, math.ceil(p["L"] / stock_len - 1e-9))
+        sl = min(stock_len, max_bar(p["sec"])) if stock_len else max_bar(p["sec"])
+        k = max(1, math.ceil(p["L"] / sl - 1e-9))
         p["parts"] = k
         if k > 1:
             n_splice += k - 1

@@ -56,7 +56,7 @@ def piece_list(model, sc):
     return out, q
 
 
-def cutting_plan(pieces, stock=K.STOCK_LEN, kerf=K.CUT_ALLOW):
+def cutting_plan(pieces, stock=6.0, kerf=K.CUT_ALLOW):
     """Раскрой на хлысты 6 м (FFD) — для варианта закупки целыми хлыстами.
 
     Детали длиннее хлыста делятся: полный хлыст + остаток (стык на раме)."""
@@ -111,6 +111,13 @@ def member_table(an):
 # ---------------------------------------------------------------------------
 # Заготовки для изготовления: фактические длины реза и торцевые резы
 # ---------------------------------------------------------------------------
+# Стык обрешётины: 35×35 продаётся хлыстами 6 м, обрешётина 6.98 м — из двух частей. Стык в пролёте между
+# рамами 2 и 3, в 0.29 м от стропила рамы 3: там коэффициент использования обрешётины ≤ 0.34, стык встык с
+# полным проваром на вкладыше (Rwy = 0.85·Ry) — 0.40; короткая часть 1.49 м — по 4 шт. из хлыста 6 м.
+LATH_SPLICE_Y = 4.31
+LATH_INSERT = "30×30×2"
+
+
 def fab_details(model, sc, lath_split=False):
     """Список заготовок: name, group, sec, L (длина реза, м), n, cuts (описание торцов).
 
@@ -168,10 +175,14 @@ def fab_details(model, sc, lath_split=False):
         elif grp == "sb":
             add("Нижний пояс боковой фермы", grp, sec, L - col.b, 1,
                 "оба торца — прямые; по фактическому расстоянию между гранями колонн")
-        elif grp == "lath" and lath_split:
-            add("Обрешётина, часть 1 (край → рама 3)", grp, sec, M.BAY - M.Y_MIN, 1,
-                "торцы прямые; стык с частью 2 — над стропилом рамы 3")
-            add("Обрешётина, часть 2 (рама 3 → край)", grp, sec, M.Y_MAX - M.BAY, 1, "торцы прямые")
+        elif grp == "lath" and M.Y_MAX - M.Y_MIN > K.max_bar(sec) - 0.01:
+            d_ = M.BAY - LATH_SPLICE_Y
+            add("Обрешётина, часть 1 (передний край → стык)", grp, sec, LATH_SPLICE_Y - M.Y_MIN, 1,
+                f"торцы прямые; стык с частью 2 — в пролёте, в {d_ * 1000:.0f} мм от стропила рамы 3 "
+                f"(на вкладыше, см. узлы)")
+            add("Обрешётина, часть 2 (стык → задний край)", grp, sec, M.Y_MAX - LATH_SPLICE_Y, 1, "торцы прямые")
+            add("Вкладыш стыка обрешётины", grp, sec_by_name(LATH_INSERT), 0.10, 1,
+                "отрезок трубы внутрь стыка, по 50 мм в каждую часть")
         elif grp == "lath":
             add("Обрешётина цельная", grp, sec, M.Y_MAX - M.Y_MIN, 1,
                 "торцы прямые; из хлыста 12 м, без стыка")
@@ -215,7 +226,6 @@ def _pack(items, k12, stocks, kerf):
 
 def bar_plan(details, stocks=None, kerf=K.CUT_ALLOW):
     """Раскрой на хлысты 6 и 12 м: по каждому сечению — сочетание с наименьшей длиной закупки."""
-    stocks = stocks or K.BAR_LENGTHS
     by_sec = defaultdict(list)
     secs = {}
     for d in details:
@@ -225,9 +235,10 @@ def bar_plan(details, stocks=None, kerf=K.CUT_ALLOW):
     plan = {}
     for sn, items in by_sec.items():
         items.sort(key=lambda t: -t[0])
+        stocks_s = stocks or K.bar_lengths(secs[sn])
         best = None
         for k12 in range(len(items) + 1):
-            bars = _pack(items, k12, stocks, kerf)
+            bars = _pack(items, k12, stocks_s, kerf)
             if bars is None:
                 continue
             key = (sum(b["stock"] for b in bars), len(bars))

@@ -197,8 +197,12 @@ def _n(v, sign=False):
     return t.replace(",", "\u202f")
 
 
+def _bars_txt(n12, n6):
+    return " + ".join(t for t in (f"{n12}×12 м" if n12 else "", f"{n6}×6 м" if n6 else "") if t)
+
+
 def _bar_svg(cuts, free, stock, colors, scale_len=12.0):
-    """Полоса хлыста: заготовки + остаток (масштаб — по 12 м, хлыст 6 м вдвое короче)."""
+    """Полоса хлыста: заготовки + остаток (масштаб — по самому длинному хлысту в раскрое)."""
     W, H = 720, 34
     sx = W / scale_len
     out = [f'<svg viewBox="0 0 {W + 2} {H + 2}" class="bar" role="img" aria-label="раскроенный хлыст">',
@@ -248,6 +252,7 @@ def build_html(an, sc, title, notes, details, plan, plates, q, details_split=Non
     srow = []
     tot_need = tot_buy = 0.0
     n6 = n12 = 0
+    scale_len = max(b["stock"] for p in plan.values() for b in p["bars"])
     for sn, p in sorted(plan.items(), key=lambda kv: -kv[1]["need"] * kv[1]["sec"].price):
         bars = p["bars"]
         need_m = need_by_sec.get(sn, p["need"])
@@ -273,7 +278,7 @@ def build_html(an, sc, title, notes, details, plan, plates, q, details_split=Non
             else:
                 word = "хлыст" if cnt == 1 else "хлыста" if cnt < 5 else "хлыстов"
                 rows_html.append(f'<div class="bl"><div class="bh"><b>× {cnt}</b> {word} {stock:.0f} м</div>'
-                                 f'{_bar_svg(cuts, free, stock, COLORS)}<div class="bd">{html.escape(desc)}</div></div>')
+                                 f'{_bar_svg(cuts, free, stock, COLORS, scale_len)}<div class="bd">{html.escape(desc)}</div></div>')
         buy = p["need"] + 0.02 if short else p["buy"]
         if not short:
             n6 += c6
@@ -289,7 +294,7 @@ def build_html(an, sc, title, notes, details, plan, plates, q, details_split=Non
     cost_m = sum(d["L"] * d["n"] * d["sec"].price for d in details)
     cost_b = sum((p["need"] + 0.02 if p["need"] < 1 else p["buy"]) * p["sec"].price for p in plan.values())
     srow.append(f'<tr><td><b>Итого</b></td><td class="n"><b>{tot_need:.2f}</b></td><td class="n"><b>{_n(cost_m)}</b></td>'
-                f'<td><b>{n12}×12 + {n6}×6</b></td><td class="n"><b>{tot_buy:.2f}</b></td>'
+                f'<td><b>{_bars_txt(n12, n6)}</b></td><td class="n"><b>{tot_buy:.2f}</b></td>'
                 f'<td class="n"><b>{_n(cost_b)}</b></td></tr>')
     prow = "".join(
         f'<tr><td>{html.escape(nm)}</td><td>{html.escape(size)}</td><td class="n">{t if t else "—"}</td>'
@@ -301,7 +306,7 @@ def build_html(an, sc, title, notes, details, plan, plates, q, details_split=Non
     kpi = (f'<div class="kpi"><div>Металл труб<b>{tube_kg:.0f} кг</b></div>'
            f'<div>Пластины<b>{plate_kg:.0f} кг</b></div>'
            f'<div>Трубы по метражу<b>{tot_need:.0f} м</b></div>'
-           f'<div>Или целыми хлыстами<b>{n12}×12 + {n6}×6 м</b></div></div>')
+           f'<div>Или целыми хлыстами<b>{_bars_txt(n12, n6)}</b></div></div>')
     notes_html = "".join(f"<li>{html.escape(n)}</li>" for n in notes)
     extra_css = """
 svg.bar{width:100%;max-width:760px;height:auto;display:block;margin:4px 0}
@@ -337,11 +342,12 @@ h3{font-size:15px;margin:18px 0 4px}
 Подкосы и подвески лучше окончательно подогнать по месту на стенде.</p>
 <div class="card long"><table><thead><tr><th>Заготовка</th><th>Сечение</th><th class="n">Длина, м</th><th class="n">Кол-во</th>
 <th class="n">Масса, кг</th><th>Торцы</th></tr></thead><tbody>{drow}</tbody></table></div>
-<h2>Закупка и раскрой труб (хлысты 6 и 12 м)</h2>
-<p class="note"><b>Рекомендуется покупать по метражу с резкой в магазине</b>: платите только за длину деталей, обрешётины
-6.98 м режутся из хлыстов 12 м целиком — без стыков. Если магазин продаёт только целыми хлыстами — ниже раскрой
-с наименьшей закупкой (сочетание хлыстов 6 и 12 м по каждому профилю); в этом случае обрешётину выгоднее резать
-на 5.78 + 1.20 м со стыком над стропилом рамы 3. Пропил 3 мм. Суммы — по прайсу, для сравнения способов.</p>
+<h2>Закупка и раскрой труб (хлысты 6 м; 12 м — только от 70×70)</h2>
+<p class="note"><b>Рекомендуется покупать по метражу с резкой в магазине</b>: платите только за длину деталей.
+Трубы мельче 70×70 продаются хлыстами 6 м, поэтому обрешётина 6.98 м — из двух частей 5.49 + 1.49 м со стыком на
+вкладыше в пролёте, в 0.29 м от стропила рамы 3 (стыки всех обрешётин — на одной линии, см. чертежи узлов).
+Если магазин продаёт только целыми хлыстами — ниже раскрой с наименьшей закупкой. Пропил 3 мм. Суммы — по прайсу,
+для сравнения способов.</p>
 <div class="card"><table><thead><tr><th>Профиль</th><th class="n">По метражу, м</th><th class="n">По метражу, грн</th>
 <th>Целыми хлыстами</th><th class="n">Хлыстов, м</th><th class="n">Хлыстами, грн</th></tr></thead>
 <tbody>{"".join(srow)}</tbody></table></div>
