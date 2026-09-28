@@ -20,12 +20,11 @@ import model as M
 
 STOCK_LEN = None       # наибольшая заготовка без стыка: по сечению (max_bar), если не задано явно
 BAR_LENGTHS = (6.0, 12.0)   # длины хлыстов в продаже
-BIG_BAR_MIN = 0.070    # хлысты 12 м — только у труб от 70×70 (меньшая сторона ≥ 70 мм); мельче — 6 м
-
-
 def bar_lengths(sec):
-    """Длины хлыстов, в которых продаётся сечение (по данным поставщика: 12 м — от 70×70)."""
-    return (6.0, 12.0) if min(sec.h, sec.b) >= BIG_BAR_MIN - 1e-9 else (6.0,)
+    """Длины хлыстов, в которых продаётся сечение — по полному прайсу (колонка L);
+    если позиции там нет — 6 м."""
+    from sections import bar_lengths_from_price
+    return bar_lengths_from_price(sec.source) or (6.0,)
 
 
 def max_bar(sec):
@@ -63,7 +62,7 @@ def quantities(model, sc, stock_len=None):
     """Детали, длины, массы, площади, швы — по модели.
 
     stock_len — наибольшая заготовка без стыка; по умолчанию — наибольший хлыст данного сечения
-    (6 м для труб мельче 70×70, 12 м — от 70×70)."""
+    (по полному прайсу, колонка L)."""
     stock_len = stock_len or STOCK_LEN
     m = model
     piece_len = defaultdict(float)

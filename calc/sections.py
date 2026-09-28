@@ -15,6 +15,8 @@ import openpyxl
 
 ROOT = Path(__file__).resolve().parent.parent
 PRICE_XLSX = ROOT / "input" / "price_profile_tubes.xlsx"
+# полный прайс с сайта поставщика (28.09): та же номенклатура + длина хлыста L по каждой позиции
+PRICE_FULL_XLSX = ROOT / "input" / "price_profile_tubes_full.xlsx"
 
 RHO = 7850.0  # кг/м3
 
@@ -164,3 +166,31 @@ if __name__ == "__main__":
         print(f"{s.name:>12} {s.price:7.1f} грн/м  {s.mass:5.2f} кг/м  A={s.A*1e4:5.2f} см2 "
               f"Wy={s.Wy*1e6:6.2f} Wz={s.Wz*1e6:6.2f} см3 iy={s.iy*100:4.2f} iz={s.iz*100:4.2f} см "
               f"грн/кг={s.price/s.mass:5.1f}  c/t={s.c_t_max:4.1f}")
+
+
+def _norm_name(name: str) -> str:
+    s = re.sub(r";\s*L\s*-.*$", "", str(name))
+    s = s.replace(" (кількість обмежена)", "")
+    return re.sub(r"\s+", " ", s).strip()
+
+
+_BARS = None
+
+
+def bar_lengths_from_price(source: str):
+    """Длины хлыстов позиции по полному прайсу (колонка «Длина хлыста L, м»), м.
+    Обрезки «1-3» и короткие остатки (< 5 м) не учитываются. None — позиции нет в полном прайсе."""
+    global _BARS
+    if _BARS is None:
+        _BARS = {}
+        if PRICE_FULL_XLSX.exists():
+            ws = openpyxl.load_workbook(PRICE_FULL_XLSX, data_only=True).active
+            for r in list(ws.iter_rows(values_only=True))[1:]:
+                if not r[1] or r[2] is None:
+                    continue
+                txt = re.sub(r"\d+\s*-\s*\d+", "", str(r[2]))          # «1-3» — обрезки
+                vals = {float(v.replace(",", ".")) for v in re.findall(r"\d+(?:,\d+)?", txt)}
+                vals = tuple(sorted(v for v in vals if v >= 5.0))
+                if vals:
+                    _BARS[_norm_name(r[1])] = vals
+    return _BARS.get(_norm_name(source))
