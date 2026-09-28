@@ -75,6 +75,8 @@ def quantities(model, sc, stock_len=None):
         meta = m.pieces[pid]
         g = meta["group"]
         sec = piece_sec[pid]
+        if g == "lk":
+            continue          # расчётная жёсткая вставка (стенка стропила), не деталь
         if g == "col":
             # элементы модели идут до оси стропила (+3.10); фактический верх колонны — под опорной
             # пластиной (+3.043); плюс заделка в бетон
