@@ -273,6 +273,7 @@ class Analysis:
                 plane = "z" if v <= w else "y"
                 if plane not in cur:
                     cur[plane] = (lam, piece_N[pc])
+        ge_ncr = self._ge_buckling(ends)
         for mid, mm in m.members.items():
             L = mm["L"]
             Lz, Ly = L, L   # Lz — изгиб в плоскости b (ось Iz), Ly — в плоскости h (ось Iy)
@@ -288,8 +289,28 @@ class Analysis:
                 # торцевая обвязка приварена к каждой обрешётине: из плоскости ската (ось Iz — в плоскости b,
                 # b лежит в плоскости ската) она раскреплена обрешётинами — расчётная длина равна их шагу
                 Lz = min(Lz, max(m.elems[ei].L for ei in mm["elems"]))
+                # в вертикальной плоскости обвязка лежит на упругих опорах (консоли обрешётин): расчётная
+                # длина — по собственной устойчивости обвязки (сжатие только в ней, опоры — весь каркас)
+                if ge_ncr is not None and -forces[mid]["Nmin"] > 1.0:
+                    Ncr = ge_ncr * piece_N[pc]
+                    Lel = max(m.elems[ei].L for ei in mm["elems"])
+                    Ly = min(Ly, max(math.pi * math.sqrt(E * sec.Iy / Ncr), Lel))
             res[mid] = (Ly, Lz, alpha1)
         return res, alpha1
+
+    def _ge_buckling(self, ends):
+        """Коэффициент критической нагрузки торцевой обвязки: геометрическая жёсткость только от
+        сжатия в обвязке, упругие опоры (обрешётины, стропила) — по всей модели."""
+        m = self.model
+        idx = [i for i, e in enumerate(m.elems) if m.members[e.member].get("kind") == "ge"]
+        if not idx:
+            return None
+        ge_ends = np.zeros_like(np.asarray(ends))
+        ge_ends[idx] = np.asarray(ends)[idx]
+        if ge_ends[idx, 0].max() <= 1.0:      # сжатие: сила на конце 1 по оси x > 0
+            return None
+        modes, _ = self.solver.buckling(ge_ends, nmodes=2)
+        return min(lam for lam, _ in modes) if modes else None
 
     # ---------------------------------------------------------------
     def check_members(self):

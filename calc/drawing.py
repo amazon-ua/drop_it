@@ -13,8 +13,18 @@ COLORS = {
     "col": "#2563eb", "raf": "#0f766e", "tie": "#b45309", "kp": "#7c3aed", "strut": "#7c3aed",
     "knee": "#16a34a", "lath": "#db2777", "sd": "#dc2626", "sb": "#0891b2", "st": "#0891b2",
     "stub": "#2563eb", "eave": "#0891b2", "kl": "#16a34a", "xb": "#ca8a04",
-    "ge": "#ea580c", "gk": "#65a30d", "gd": "#ca8a04",
+    "ge": "#ea580c", "gk": "#65a30d", "gd": "#ca8a04", "le": "#be185d", "lr": "#9d174d",
 }
+
+
+def row_group(sc, rows, x):
+    """Группа обрешётины ряда: карнизная (le), коньковая (lr) или рядовая (lath)."""
+    xs = [r[0] for r in rows]
+    if abs(x - M.X_RIDGE) < 1e-6:
+        return sc.ridge_row_group
+    if abs(x - min(xs)) < 1e-6 or abs(x - max(xs)) < 1e-6:
+        return sc.eave_row_group
+    return "lath"
 
 
 def _svg_view(model, sc, view, W=900, H=420, pad=50):
@@ -28,13 +38,13 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
             # рама 1 (логическая y = 0); в плоскости рамы откладываем расстояние от левой колонны
             if abs(model.logical_y(p1)) > 1e-6 or abs(model.logical_y(p2)) > 1e-6:
                 continue
-            if g == "lath":
+            if g in ("lath", "le", "lr"):
                 continue
             a, b = (p1[0], p1[2]), (p2[0], p2[2])
         elif view == "side":
             if abs(p1[0]) > 1e-6 or abs(p2[0]) > 1e-6:
                 continue
-            if g == "lath":
+            if g in ("lath", "le", "lr"):
                 continue
             a, b = (p1[1], p1[2]), (p2[1], p2[2])
         else:
@@ -69,11 +79,13 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
         out.append(f'<text x="{(x1+x2)/2:.1f}" y="{(y1+y2)/2:.1f}" class="corrt">проезд 4.00 × 2.90</text>')
         # сечения обрешётки на стропилах
         for (x, z, trib, side) in model.rows:
-            px, py = T((x, z + 0.05))
-            w = sc.groups["lath"].b * s
-            h = sc.groups["lath"].h * s
+            rg = row_group(sc, model.rows, x)
+            ls = sc.groups.get(rg, sc.groups["lath"])
+            px, py = T((x, z + sc.groups['raf'].h / 2 / math.cos(M.SLOPE) + ls.h / 2))   # низ — на верхе стропила
+            w = ls.b * s
+            h = ls.h * s
             out.append(f'<rect x="{px-w/2:.1f}" y="{py-h/2:.1f}" width="{max(w,2):.1f}" height="{max(h,2):.1f}" '
-                       f'fill="{COLORS["lath"]}"/>')
+                       f'fill="{COLORS.get(rg, COLORS["lath"])}"/>')
     if view == "plan":
         # контур кровли — параллелограмм (косина площадки)
         corners = [(-M.OVH_L, M.Y_MIN), (M.SPAN + M.OVH_R, M.Y_MIN), (M.SPAN + M.OVH_R, M.Y_MAX), (-M.OVH_L, M.Y_MAX)]
@@ -124,13 +136,13 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
         for fy, nm in zip(model.frames_y, ("рама 1", "рама 2", "рама 3")):
             lab = PP(xr, fy, M.z_rafter(xr) + dz_roof)
             out.append(f'<text x="{lab[0]:.1f}" y="{lab[1]-8:.1f}" class="lev" text-anchor="middle">{nm}</text>')
-    order = ["lath", "xb", "gd", "sb", "st", "eave", "tie", "kp", "strut", "knee", "sd", "kl", "gk", "ge", "raf",
+    order = ["lath", "le", "lr", "xb", "gd", "sb", "st", "eave", "tie", "kp", "strut", "knee", "sd", "kl", "gk", "ge", "raf",
              "stub", "col"]
     segs.sort(key=lambda t: order.index(t[2]) if t[2] in order else 0)
     for a, b, g, sec in segs:
         pa, pb = T(a), T(b)
         if view == "plan":
-            w = max(1.2, (sec.b if g != "lath" else sec.b) * s)
+            w = max(1.2, sec.b * s)
         else:
             w = max(1.5, sec.h * s)
         out.append(f'<line x1="{pa[0]:.1f}" y1="{pa[1]:.1f}" x2="{pb[0]:.1f}" y2="{pb[1]:.1f}" '
