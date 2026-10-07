@@ -1,0 +1,113 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Разбивка лунок</title>
+<style>
+:root{--bg:#f7f7f5;--fg:#1f2328;--muted:#5b6470;--card:#ffffff;--line:#d9dde3;--accent:#0f766e;--dim:#64748b;--corr:#16a34a}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15181c;--fg:#e6e8eb;--muted:#9aa4b0;--card:#1d2127;--line:#343a42;--accent:#2dd4bf;--dim:#94a3b8;--corr:#4ade80}}
+:root[data-theme="dark"]{--bg:#15181c;--fg:#e6e8eb;--muted:#9aa4b0;--card:#1d2127;--line:#343a42;--accent:#2dd4bf;--dim:#94a3b8;--corr:#4ade80}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:18px;margin:32px 0 8px}p.sub{color:var(--muted);margin:0 0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin:12px 0;overflow-x:auto}
+svg.drw{width:100%;height:auto;display:block}
+.ground{stroke:var(--muted);stroke-width:1.5}.corr{fill:none;stroke:var(--corr);stroke-dasharray:6 4;stroke-width:1.2}
+.corrl{stroke:var(--corr);stroke-dasharray:6 4;stroke-width:1}.corrt{fill:var(--corr);font-size:12px;text-anchor:middle}
+.roof{fill:none;stroke:var(--dim);stroke-dasharray:3 3}.dim{stroke:var(--dim);stroke-width:1}
+.dimt{fill:var(--dim);font-size:12px;text-anchor:middle}.lev{fill:var(--dim);font-size:12px}
+table{border-collapse:collapse;width:100%;font-size:14px}th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.sw{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.ok{color:var(--accent);font-weight:600}.kpi{display:flex;gap:12px;flex-wrap:wrap}.kpi div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:160px}
+.kpi b{display:block;font-size:20px}.note{color:var(--muted);font-size:13px}
+
+svg.nd{width:100%;height:auto;display:block;background:var(--card)}
+.ax{stroke:var(--dim);stroke-width:0.6;stroke-dasharray:10 3 2 3;fill:none}
+.dl{stroke:var(--dim);stroke-width:0.6;fill:none}
+.dt{fill:var(--dim);font-size:18px;font-family:system-ui,sans-serif}
+.lb{fill:var(--fg);font-size:21px;font-family:system-ui,sans-serif}
+.lbs{fill:var(--muted);font-size:18px;font-family:system-ui,sans-serif}
+.ld{stroke:var(--muted);stroke-width:0.6;fill:none}
+.wm{fill:#f59e0b;stroke:none}
+.wn{fill:#f59e0b;font-size:11px;font-weight:700;font-family:system-ui,sans-serif}
+.grid2{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:900px){.grid2{grid-template-columns:1.35fr 1fr}}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 10px;margin:2px 4px 2px 0;font-size:13px}
+h3{font-size:15px;margin:14px 0 6px}
+ol li,ul li{margin:3px 0}
+.wk{display:inline-block;min-width:22px;text-align:center;border-radius:4px;background:#f59e0b;color:#111;font-weight:700;margin-right:6px}
+.mmrow{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.mmimg{flex:0 1 420px;min-width:260px}.mmtxt{flex:1 1 260px;font-size:14px}.mmtxt p{margin:6px 0}
+svg.mm{background:transparent}
+@media print{
+  body{background:#fff}
+  .mmimg{flex:0 0 46%}
+  main{max-width:none;padding:0}
+  .grid2{grid-template-columns:1fr}
+  .grid2 > .card:nth-child(2){width:62%;margin:0 auto}
+  h2.pb{break-before:page;page-break-before:always}
+  .grid2.c{grid-template-columns:1.8fr 1fr}
+  .grid2.c > .card:nth-child(2){width:auto;margin:0}
+  .card,.grid2,tr,li{break-inside:avoid;page-break-inside:avoid}
+  h2,h3{break-after:avoid;page-break-after:avoid}
+  h2{break-before:auto}
+}
+
+table td.n,table th.n{text-align:right;font-variant-numeric:tabular-nums}
+.leg{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted);margin:6px 0 0}
+.leg span b{display:inline-block;width:22px;height:0;border-top:3px solid;vertical-align:middle;margin-right:6px}
+@media print{.plan{break-inside:avoid}}
+</style></head><body><main>
+<h1>Разбивочный план лунок</h1>
+<p class="sub">Навес 5.45 × 4.60 м · вид сверху, дорога внизу · размеры в метрах, по центрам лунок · косина площадки 2.87°</p>
+<div class="card plan"><svg viewBox="0 0 10300 10000" class="nd" role="img" aria-label="разбивочный план лунок"><defs><marker id="ar" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs><polygon points="600.0,9350.0 9700.0,9350.0 9700.0,8010.0 600.0,8010.0" fill="#94a3b8" fill-opacity="0.18" stroke="none" stroke-width="0.8"/><text x="4400.0" y="9000.0" class="lb" text-anchor="middle" style="font-size:200px;fill:#64748b;font-weight:800">ДОРОГА · ВЪЕЗД</text><line x1="6500.0" y1="8000.0" x2="9700.0" y2="8000.0" stroke="#64748b" stroke-width="30" stroke-dasharray="40 60"/><text x="8300.0" y="8220.0" class="dt" text-anchor="middle" style="font-size:180px;fill:#64748b">забор</text><polygon points="2300.0,7900.0 7700.0,7900.0 8030.5,1308.0 2630.5,1308.0" fill="#cbd5e1" fill-opacity="0.25" stroke="var(--fg)" stroke-width="16.0"/><polygon points="2300.0,8000.0 2400.0,8000.0 2400.0,7900.0 2300.0,7900.0" fill="#475569" fill-opacity="1" stroke="var(--fg)" stroke-width="8.0"/><polygon points="6400.0,8000.0 6500.0,8000.0 6500.0,7900.0 6400.0,7900.0" fill="#475569" fill-opacity="1" stroke="var(--fg)" stroke-width="8.0"/><polygon points="2400.0,7970.0 6400.0,7970.0 6400.0,7930.0 2400.0,7930.0" fill="#64748b" fill-opacity="0.6" stroke="none" stroke-width="10.0"/><text x="4400.0" y="8260.0" class="dt" text-anchor="middle" style="font-size:180px">проём ворот 4.00, полотно → вправо</text><polygon points="2400.0,7900.0 6400.0,7900.0 6730.5,1308.0 2730.5,1308.0" fill="none" fill-opacity="1" stroke="#16a34a" stroke-width="12.0" stroke-dasharray="40 30"/><text x="4550.0" y="4600.0" class="dt" text-anchor="middle" style="font-size:180px;fill:#16a34a">коридор заезда 4.00</text><polygon points="1491.2,8078.5 8241.2,8078.5 8588.8,1109.5 1838.8,1109.5" fill="none" fill-opacity="0.9" stroke="#dc2626" stroke-width="13.0" stroke-dasharray="70 40"/><text x="1888.8" y="989.5" class="dt" text-anchor="start" style="font-size:180px;fill:#dc2626">контур кровли 6.75 × 6.98</text><line x1="1927.6" y1="7349.4" x2="2201.4" y2="1858.6" class="ax" style="stroke:#dc2626;stroke-width:9.0;stroke-dasharray:140 40 30 40"/><line x1="7377.6" y1="7349.4" x2="7651.4" y2="1858.6" class="ax" style="stroke:#dc2626;stroke-width:9.0;stroke-dasharray:140 40 30 40"/><line x1="1500.0" y1="6900.0" x2="7850.0" y2="6900.0" class="ax" style="stroke:#dc2626;stroke-width:9.0;stroke-dasharray:140 40 30 40"/><line x1="1729.0" y1="2308.0" x2="8079.0" y2="2308.0" class="ax" style="stroke:#dc2626;stroke-width:9.0;stroke-dasharray:140 40 30 40"/><line x1="1950.0" y1="6900.0" x2="1950.0" y2="7460.0" class="dl"/><line x1="7400.0" y1="6900.0" x2="7400.0" y2="7460.0" class="dl"/><line x1="1950.0" y1="7420.0" x2="7400.0" y2="7420.0" stroke="#0369a1" stroke-width="11.0" marker-start="url(#ar)" marker-end="url(#ar)" style="color:#0369a1"/><g transform="translate(4675.0 7420.0) rotate(0.00)"><rect x="-255.0" y="-157.5" width="510.0" height="165.0" fill="var(--card)" opacity="0.92"/><text x="0" y="-27.0" text-anchor="middle" style="fill:#0369a1;font-size:150px;font-weight:700;font-family:system-ui,sans-serif">5.450</text></g><line x1="2179.0" y1="2308.0" x2="2179.0" y2="1788.0" class="dl"/><line x1="7629.0" y1="2308.0" x2="7629.0" y2="1788.0" class="dl"/><line x1="2179.0" y1="1828.0" x2="7629.0" y2="1828.0" stroke="#0369a1" stroke-width="11.0" marker-start="url(#ar)" marker-end="url(#ar)" style="color:#0369a1"/><g transform="translate(4904.0 1828.0) rotate(0.00)"><rect x="-255.0" y="-157.5" width="510.0" height="165.0" fill="var(--card)" opacity="0.92"/><text x="0" y="-27.0" text-anchor="middle" style="fill:#0369a1;font-size:150px;font-weight:700;font-family:system-ui,sans-serif">5.450</text></g><line x1="1950.0" y1="6900.0" x2="1390.7" y2="6872.1" class="dl"/><line x1="2179.0" y1="2308.0" x2="1619.7" y2="2280.1" class="dl"/><line x1="1430.6" y1="6874.1" x2="1659.6" y2="2282.1" stroke="#0369a1" stroke-width="11.0" marker-start="url(#ar)" marker-end="url(#ar)" style="color:#0369a1"/><g transform="translate(1545.1 4578.1) rotate(-87.15)"><rect x="-255.0" y="-157.5" width="510.0" height="165.0" fill="var(--card)" opacity="0.92"/><text x="0" y="-27.0" text-anchor="middle" style="fill:#0369a1;font-size:150px;font-weight:700;font-family:system-ui,sans-serif">4.597</text></g><line x1="7400.0" y1="6900.0" x2="7919.4" y2="6925.9" class="dl"/><line x1="7629.0" y1="2308.0" x2="8148.4" y2="2333.9" class="dl"/><line x1="7879.4" y1="6923.9" x2="8108.4" y2="2331.9" stroke="#0369a1" stroke-width="11.0" marker-start="url(#ar)" marker-end="url(#ar)" style="color:#0369a1"/><g transform="translate(7993.9 4627.9) rotate(-87.15)"><rect x="-255.0" y="-157.5" width="510.0" height="165.0" fill="var(--card)" opacity="0.92"/><text x="0" y="-27.0" text-anchor="middle" style="fill:#0369a1;font-size:150px;font-weight:700;font-family:system-ui,sans-serif">4.597</text></g><line x1="1950.0" y1="6900.0" x2="7629.0" y2="2308.0" stroke="#a16207" stroke-width="11.0" marker-start="url(#ar)" marker-end="url(#ar)" style="color:#a16207"/><g transform="translate(3653.7 5522.4) rotate(-38.96)"><rect x="-255.0" y="-157.5" width="510.0" height="165.0" fill="var(--card)" opacity="0.92"/><text x="0" y="-27.0" text-anchor="middle" style="fill:#a16207;font-size:150px;font-weight:700;font-family:system-ui,sans-serif">7.304</text></g><line x1="7400.0" y1="6900.0" x2="2179.0" y2="2308.0" stroke="#a16207" stroke-width="11.0" marker-start="url(#ar)" marker-end="url(#ar)" style="color:#a16207"/><g transform="translate(5833.7 5522.4) rotate(41.33)"><rect x="-255.0" y="-157.5" width="510.0" height="165.0" fill="var(--card)" opacity="0.92"/><text x="0" y="-27.0" text-anchor="middle" style="fill:#a16207;font-size:150px;font-weight:700;font-family:system-ui,sans-serif">6.952</text></g><line x1="2300.0" y1="7900.0" x2="1950.0" y2="6900.0" stroke="#7e22ce" stroke-width="11.0" marker-start="url(#ar)" marker-end="url(#ar)" style="color:#7e22ce"/><g transform="translate(2125.0 7400.0) rotate(70.71)"><rect x="-255.0" y="-157.5" width="510.0" height="165.0" fill="var(--card)" opacity="0.92"/><text x="0" y="-27.0" text-anchor="middle" style="fill:#7e22ce;font-size:150px;font-weight:700;font-family:system-ui,sans-serif">1.060</text></g><line x1="6500.0" y1="7900.0" x2="7400.0" y2="6900.0" stroke="#7e22ce" stroke-width="11.0" marker-start="url(#ar)" marker-end="url(#ar)" style="color:#7e22ce"/><g transform="translate(6950.0 7400.0) rotate(-48.01)"><rect x="-255.0" y="-157.5" width="510.0" height="165.0" fill="var(--card)" opacity="0.92"/><text x="0" y="-27.0" text-anchor="middle" style="fill:#7e22ce;font-size:150px;font-weight:700;font-family:system-ui,sans-serif">1.345</text></g><line x1="5500.0" y1="7900.0" x2="5500.0" y2="6900.0" stroke="#0f766e" stroke-width="11.0" marker-start="url(#ar)" marker-end="url(#ar)" style="color:#0f766e"/><g transform="translate(5500.0 7400.0) rotate(-90.00)"><rect x="-255.0" y="-157.5" width="510.0" height="165.0" fill="var(--card)" opacity="0.92"/><text x="0" y="-27.0" text-anchor="middle" style="fill:#0f766e;font-size:150px;font-weight:700;font-family:system-ui,sans-serif">1.000</text></g><line x1="5780.3" y1="2308.0" x2="5830.5" y2="1308.0" stroke="#0f766e" stroke-width="11.0" marker-start="url(#ar)" marker-end="url(#ar)" style="color:#0f766e"/><g transform="translate(5805.4 1808.0) rotate(-87.13)"><rect x="-255.0" y="-157.5" width="510.0" height="165.0" fill="var(--card)" opacity="0.92"/><text x="0" y="-27.0" text-anchor="middle" style="fill:#0f766e;font-size:150px;font-weight:700;font-family:system-ui,sans-serif">1.000</text></g><line x1="2045.3" y1="5000.0" x2="2445.4" y2="5000.0" stroke="#0f766e" stroke-width="11.0" marker-start="url(#ar)" marker-end="url(#ar)" style="color:#0f766e"/><g transform="translate(2245.3 5000.0) rotate(0.00)"><rect x="-255.0" y="-157.5" width="510.0" height="165.0" fill="var(--card)" opacity="0.92"/><text x="0" y="-27.0" text-anchor="middle" style="fill:#0f766e;font-size:150px;font-weight:700;font-family:system-ui,sans-serif">0.400</text></g><line x1="7495.3" y1="5000.0" x2="7845.4" y2="5000.0" stroke="#0f766e" stroke-width="11.0" marker-start="url(#ar)" marker-end="url(#ar)" style="color:#0f766e"/><g transform="translate(7670.3 5000.0) rotate(0.00)"><rect x="-255.0" y="-157.5" width="510.0" height="165.0" fill="var(--card)" opacity="0.92"/><text x="0" y="-27.0" text-anchor="middle" style="fill:#0f766e;font-size:150px;font-weight:700;font-family:system-ui,sans-serif">0.350</text></g><line x1="2300.0" y1="8520.0" x2="7700.0" y2="8520.0" stroke="var(--dim)" stroke-width="11.0" marker-start="url(#ar)" marker-end="url(#ar)" style="color:var(--dim)"/><g transform="translate(5000.0 8520.0) rotate(0.00)"><rect x="-615.0" y="-157.5" width="1230.0" height="165.0" fill="var(--card)" opacity="0.92"/><text x="0" y="-27.0" text-anchor="middle" style="fill:var(--dim);font-size:150px;font-weight:700;font-family:system-ui,sans-serif">площадка 5.40</text></g><polygon points="1800.0,7050.0 2100.0,7050.0 2100.0,6750.0 1800.0,6750.0" fill="#e5e7eb" fill-opacity="1" stroke="#0369a1" stroke-width="16.0"/><polygon points="1900.0,6930.0 2000.0,6930.0 2000.0,6870.0 1900.0,6870.0" fill="#2563eb" fill-opacity="1" stroke="#111" stroke-width="8.0"/><text x="1690.0" y="6700.0" class="lb" text-anchor="end" style="font-size:260px;font-weight:800">Л1</text><polygon points="7250.0,7050.0 7550.0,7050.0 7550.0,6750.0 7250.0,6750.0" fill="#e5e7eb" fill-opacity="1" stroke="#0369a1" stroke-width="16.0"/><polygon points="7350.0,6930.0 7450.0,6930.0 7450.0,6870.0 7350.0,6870.0" fill="#2563eb" fill-opacity="1" stroke="#111" stroke-width="8.0"/><text x="7660.0" y="6700.0" class="lb" text-anchor="start" style="font-size:260px;font-weight:800">П1</text><polygon points="2029.0,2458.0 2329.0,2458.0 2329.0,2158.0 2029.0,2158.0" fill="#e5e7eb" fill-opacity="1" stroke="#0369a1" stroke-width="16.0"/><polygon points="2129.0,2338.0 2229.0,2338.0 2229.0,2278.0 2129.0,2278.0" fill="#2563eb" fill-opacity="1" stroke="#111" stroke-width="8.0"/><text x="1919.0" y="2108.0" class="lb" text-anchor="end" style="font-size:260px;font-weight:800">Л3</text><polygon points="7479.0,2458.0 7779.0,2458.0 7779.0,2158.0 7479.0,2158.0" fill="#e5e7eb" fill-opacity="1" stroke="#0369a1" stroke-width="16.0"/><polygon points="7579.0,2338.0 7679.0,2338.0 7679.0,2278.0 7579.0,2278.0" fill="#2563eb" fill-opacity="1" stroke="#111" stroke-width="8.0"/><text x="7889.0" y="2108.0" class="lb" text-anchor="start" style="font-size:260px;font-weight:800">П3</text><circle cx="2300.0" cy="7900.0" r="40" fill="#ca8a04"/><text x="2200.0" y="8200.0" class="lb" text-anchor="end" style="font-size:240px;fill:#a16207;font-weight:800">A</text><circle cx="6500.0" cy="7900.0" r="40" fill="#ca8a04"/><text x="6600.0" y="8200.0" class="lb" text-anchor="start" style="font-size:240px;fill:#a16207;font-weight:800">B</text></svg>
+<div class="leg"><span><b style="border-color:#0369a1"></b>размеры между лунками</span>
+<span><b style="border-color:#a16207"></b>диагонали — контроль</span>
+<span><b style="border-color:#7e22ce"></b>засечки от опор ворот A и B</span>
+<span><b style="border-color:#0f766e"></b>привязка к кромкам площадки</span>
+<span><b style="border-color:#dc2626;border-top-style:dashed"></b>оси рядов и рам, контур кровли</span>
+<span><b style="border-color:#16a34a;border-top-style:dashed"></b>коридор заезда</span></div></div>
+
+<div class="grid2"><div class="card">
+<h3>Привязка центров лунок</h3>
+<table><thead><tr><th>Лунка</th><th class="n">X от A, м</th><th class="n">Y от линии опор, м</th>
+<th class="n">от точки A, м</th><th class="n">от точки B, м</th></tr></thead><tbody><tr><td><b>Л1</b></td><td class='n'>-0.350</td><td class='n'>1.000</td><td class='n'>1.060</td><td class='n'>4.659</td></tr><tr><td><b>П1</b></td><td class='n'>+5.100</td><td class='n'>1.000</td><td class='n'>5.197</td><td class='n'>1.345</td></tr><tr><td><b>Л3</b></td><td class='n'>-0.121</td><td class='n'>5.592</td><td class='n'>5.593</td><td class='n'>7.066</td></tr><tr><td><b>П3</b></td><td class='n'>+5.329</td><td class='n'>5.592</td><td class='n'>7.725</td><td class='n'>5.705</td></tr></tbody></table>
+<p><b>A</b> — задний левый угол левой опоры ворот (левый передний угол площадки), <b>B</b> — задний правый угол правой
+опоры (4.20 м от A по линии задних граней опор). X — вдоль этой линии вправо, Y — перпендикулярно вглубь участка.
+Ряды лунок параллельны боковым сторонам площадки: левый — 0.40 м наружу, правый — 0.35 м внутрь; передний и задний —
+1.00 м внутрь от передней и задней кромок.</p>
+</div><div class="card">
+<h3>Контроль разбивки</h3>
+<table><thead><tr><th>Контрольный размер</th><th class="n">м</th></tr></thead><tbody><tr><td>Л1–П1 и Л3–П3 (поперёк, вдоль рам)</td><td class='n'>5.450</td></tr><tr><td>Л1–Л3 и П1–П3 (вдоль рядов)</td><td class='n'>4.597</td></tr><tr><td>Диагональ Л1–П3</td><td class='n'>7.304</td></tr><tr><td>Диагональ П1–Л3</td><td class='n'>6.952</td></tr><tr><td>Ось Л1–П1 → передняя кромка площадки (по перпендикуляру)</td><td class='n'>1.000</td></tr><tr><td>Ось Л3–П3 → задняя кромка площадки (по перпендикуляру)</td><td class='n'>1.000</td></tr><tr><td>Ось Л1–Л3 → левая кромка площадки, наружу (вдоль рамы)</td><td class='n'>0.400</td></tr><tr><td>Ось П1–П3 → правая кромка площадки, внутрь (вдоль рамы)</td><td class='n'>0.350</td></tr><tr><td>Диагонали площадки (от левого / правого переднего угла)</td><td class='n'>8.73 / 8.32</td></tr></tbody></table>
+</div></div>
+
+<div class="card">
+<h3>Порядок разбивки</h3>
+<ol>
+<li>От точек <b>A</b> и <b>B</b> двумя рулетками засечь центры <b>Л1</b> (1.060 от A, 4.659 от B)
+и <b>П1</b> (5.197 от A, 1.345 от B). Проверить Л1–П1 = 5.450.</li>
+<li>От Л1 и П1 засечь <b>Л3</b> и <b>П3</b>: 4.597 вдоль ряда и по диагоналям Л1–П3 = 7.304,
+П1–Л3 = 6.952. Проверить Л3–П3 = 5.450; для контроля — Л3 и П3 от A и B по таблице.</li>
+<li>Если обе диагонали сошлись в пределах ±10 мм — разбивка верна.</li>
+<li>Центр лунки отметить колышком и <b>отноской</b>: две вешки за пределами лунки по оси ряда и две — по оси рамы
+(колышек уйдёт вместе с грунтом при бурении). По относкам потом выставляется колонна.</li>
+<li>Лунка 300×300, стороны — параллельно передней кромке площадки. Колонна 100×60 стоит по центру лунки: сторона
+100 — вдоль рамы (параллельно передней кромке), сторона 60 — вдоль ряда.</li>
+</ol></div>
+
+<div class="card">
+<h3>Отметки и глубина лунок</h3>
+<table><thead><tr><th>Лунка</th><th class="n">Земля</th><th class="n">Щебень</th><th class="n">Верх бетона</th>
+<th class="n">Глубина бетона</th><th class="n">Дно лунки</th><th class="n">Низ колонны</th><th class="n">Колонна в бетоне</th>
+<th class="n">Длина колонны</th></tr></thead><tbody><tr><td><b>Л1</b></td><td class='n'>-0.08</td><td class='n'>—</td><td class='n'>-0.06</td><td class='n'>1.20</td><td class='n'>-1.26</td><td class='n'>-1.16</td><td class='n'>1.10</td><td class='n'><b>4.203</b></td></tr><tr><td><b>П1</b></td><td class='n'>-0.21</td><td class='n'>-0.09</td><td class='n'>-0.09</td><td class='n'>1.30</td><td class='n'>-1.39</td><td class='n'>-1.29</td><td class='n'>1.20</td><td class='n'><b>4.333</b></td></tr><tr><td><b>Л3</b></td><td class='n'>-0.27</td><td class='n'>—</td><td class='n'>-0.25</td><td class='n'>1.20</td><td class='n'>-1.45</td><td class='n'>-1.35</td><td class='n'>1.10</td><td class='n'><b>4.393</b></td></tr><tr><td><b>П3</b></td><td class='n'>-0.45</td><td class='n'>-0.27</td><td class='n'>-0.27</td><td class='n'>1.35</td><td class='n'>-1.62</td><td class='n'>-1.52</td><td class='n'>1.25</td><td class='n'><b>4.563</b></td></tr></tbody></table>
+<ul>
+<li>Ноль проекта — верх щебня у левой опоры ворот (левый передний угол площадки); там же земля на −0.05. Площадка не
+выравнивается: перепад по земле 37 см, щебень — только вдоль правого ряда.</li>
+<li>Верх бетона у левых лунок — на 2 см выше земли, у правых — в уровень щебня. Глубина бетона у правых лунок больше
+(1.30 и 1.35): их верх привязан к щебню, лежащему поверх земли. Если при бурении — супесь или насыпь, бурить глубже
+(колонну тогда удлинить на столько же).</li>
+<li>Колонна — на всю глубину лунки: на дно — бетонная плитка ≈ 6 см, на неё — колонна; низ колонны
+в 10 см над дном, высоту добрать стальными подкладками так, чтобы верх опорной пластины был на +3.043.
+Арматура в лунках не нужна.</li>
+<li>Вертикаль и положение по относкам — временными подкосами из досок до набора прочности бетона (3–7 суток).
+Отметку верха контролировать нивелиром: после заливки регулировки нет.</li>
+</ul></div>
+</main></body></html>
