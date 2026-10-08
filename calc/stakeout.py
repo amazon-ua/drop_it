@@ -31,6 +31,28 @@ def dist(p, q):
     return math.hypot(q[0] - p[0], q[1] - p[1])
 
 
+def col_marks():
+    """Точки на колоннах для контроля по граням: середины обращённых друг к другу граней и ближние рёбра.
+    Колонна 100×60: сторона 100 — вдоль рамы (по X), 60 — вдоль ряда (по Y)."""
+    hb, hh = COL_B / 2, COL_H / 2
+    m = {}
+    for n, (x, y) in HOLES.items():
+        sx = 1 if n.startswith("Л") else -1          # внутрь, к другому ряду
+        sy = 1 if n.endswith("1") else -1            # к другой раме
+        m[n] = dict(side=(x + sx * hb, y),           # середина грани, обращённой к другому ряду (60 мм)
+                    end=(x, y + sy * hh),            # середина грани, обращённой к другой раме (100 мм)
+                    rib=(x + sx * hb, y + sy * hh))  # ближнее ребро (угол)
+    return m
+
+
+def clear_dims():
+    """Расстояния между гранями колонн (по серединам граней) и диагонали между ближними рёбрами, м."""
+    c = col_marks()
+    return dict(cross1=dist(c["Л1"]["side"], c["П1"]["side"]), cross3=dist(c["Л3"]["side"], c["П3"]["side"]),
+                alongL=dist(c["Л1"]["end"], c["Л3"]["end"]), alongR=dist(c["П1"]["end"], c["П3"]["end"]),
+                d_l1p3=dist(c["Л1"]["rib"], c["П3"]["rib"]), d_p1l3=dist(c["П1"]["rib"], c["Л3"]["rib"]))
+
+
 def plot_corners():
     s = PLOT_D * TAN
     return [(0.0, 0.0), (PLOT_W, 0.0), (PLOT_W + s, PLOT_D), (s, PLOT_D)]
@@ -130,12 +152,14 @@ def plan_svg():
                                                          f'stroke-dasharray:{14 * k:.0f} {4 * k:.0f} {3 * k:.0f} {4 * k:.0f}"')
     # размеры
     blue, gold, purple, teal = "#0369a1", "#a16207", "#7e22ce", "#0f766e"
-    s.dim(l1, p1, f"{CTRL['cross']:.3f}", off=-520, color=blue)
-    s.dim(l3, p3, f"{CTRL['cross']:.3f}", off=480, color=blue)
-    s.dim(l1, l3, f"{CTRL['along']:.3f}", off=520, color=blue)
-    s.dim(p1, p3, f"{CTRL['along']:.3f}", off=-480, color=blue)
-    s.dim(l1, p3, f"{CTRL['d_l1p3']:.3f}", color=gold, tpos=0.3)
-    s.dim(p1, l3, f"{CTRL['d_p1l3']:.3f}", color=gold, tpos=0.3)
+    # между колоннами — по граням (середины обращённых друг к другу граней), диагонали — между ближними рёбрами
+    c, cd = col_marks(), clear_dims()
+    s.dim(c["Л1"]["side"], c["П1"]["side"], f"{cd['cross1']:.3f}", off=-520, color=blue)
+    s.dim(c["Л3"]["side"], c["П3"]["side"], f"{cd['cross3']:.3f}", off=480, color=blue)
+    s.dim(c["Л1"]["end"], c["Л3"]["end"], f"{cd['alongL']:.3f}", off=520, color=blue)
+    s.dim(c["П1"]["end"], c["П3"]["end"], f"{cd['alongR']:.3f}", off=-480, color=blue)
+    s.dim(c["Л1"]["rib"], c["П3"]["rib"], f"{cd['d_l1p3']:.3f}", color=gold, tpos=0.3)
+    s.dim(c["П1"]["rib"], c["Л3"]["rib"], f"{cd['d_p1l3']:.3f}", color=gold, tpos=0.3)
     s.dim(A, l1, f"{FROM_AB['Л1'][0]:.3f}", color=purple)
     s.dim(B, p1, f"{FROM_AB['П1'][1]:.3f}", color=purple)
     # привязки к кромкам площадки
@@ -169,6 +193,26 @@ def plan_svg():
     return svg.replace('aria-label="разбивочный план лунок">', 'aria-label="разбивочный план лунок">' + marker, 1)
 
 
+def column_inset():
+    """Лунка с колонной крупно: откуда мерить — середины граней и рёбра."""
+    from nodes_drawing import Svg as _S
+    s = _S(-200, 470, -215, 250, k=2.0)
+    s.rect(-150, -150, 150, 150, "#e5e7eb", "#0369a1", 1, 2.5)
+    s.rect(-50, -30, 50, 30, "#2563eb", "#111", 1, 1.2)
+    for (u, z) in ((50, 0), (0, 30)):
+        p = s.P(u, z)
+        s.items.append(f'<circle cx="{p[0]:.1f}" cy="{p[1]:.1f}" r="9" fill="#0369a1" stroke="#fff" stroke-width="2"/>')
+    p = s.P(50, 30)
+    s.items.append(f'<circle cx="{p[0]:.1f}" cy="{p[1]:.1f}" r="9" fill="#a16207" stroke="#fff" stroke-width="2"/>')
+    s.dim_h(-50, 50, -30, "100", off=40)
+    s.dim_v(-50, -30, 30, "60", off=-34)
+    s.leader(50, 0, 165, -70, "середина грани", "lbs", anchor="start")
+    s.leader(0, 30, -20, 205, "середина грани", "lbs", anchor="start")
+    s.leader(50, 30, 165, 120, "ребро (угол)", "lbs", anchor="start")
+    s.text(-190, -200, "Л1 крупно; дорога внизу", "lbs")
+    return s.svg("колонна в лунке — откуда мерить")
+
+
 def build(final):
     rows = []
     for n, (x, y) in HOLES.items():
@@ -189,6 +233,14 @@ def build(final):
          f"{dist(pc[0], pc[2]):.2f} / {dist(pc[1], pc[3]):.2f}"),
     ]
     crow = "".join(f"<tr><td>{a}</td><td class='n'>{b}</td></tr>" for a, b in ctrl)
+    cd = clear_dims()
+    cctrl = [
+        ("Л1–П1 и Л3–П3: между внутренними гранями (по серединам граней)", f"{cd['cross1']:.3f}"),
+        ("Л1–Л3 и П1–П3: между гранями вдоль ряда (по серединам граней)", f"{cd['alongL']:.3f}"),
+        ("Диагональ Л1–П3: между ближними рёбрами", f"{cd['d_l1p3']:.3f}"),
+        ("Диагональ П1–Л3: между ближними рёбрами", f"{cd['d_p1l3']:.3f}"),
+    ]
+    ccrow = "".join(f"<tr><td>{a}</td><td class='n'>{b}</td></tr>" for a, b in cctrl)
     # отметки: земля, щебень (из черновика), верх бетона, глубина
     ground = {"Л1": (-0.08, None), "П1": (-0.21, -0.09), "Л3": (-0.27, None), "П3": (-0.45, -0.27)}
     erows = []
@@ -212,14 +264,24 @@ table td.n,table th.n{text-align:right;font-variant-numeric:tabular-nums}
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Разбивка лунок</title>
 <style>{css}</style></head><body><main>
 <h1>Разбивочный план лунок</h1>
-<p class="sub">Навес 5.45 × 4.60 м · вид сверху, дорога внизу · размеры в метрах, по центрам лунок · косина площадки 2.87°</p>
+<p class="sub">Навес 5.45 × 4.60 м · вид сверху, дорога внизу · размеры в метрах · косина площадки 2.87°.
+На плане между колоннами — расстояния в свету: между гранями колонн (по серединам граней), диагонали — между ближними
+рёбрами. Привязка центров лунок для разбивки до бурения — в таблицах ниже.</p>
 <div class="card plan">{plan_svg()}
-<div class="leg"><span><b style="border-color:#0369a1"></b>размеры между лунками</span>
-<span><b style="border-color:#a16207"></b>диагонали — контроль</span>
-<span><b style="border-color:#7e22ce"></b>засечки от опор ворот A и B</span>
-<span><b style="border-color:#0f766e"></b>привязка к кромкам площадки</span>
+<div class="leg"><span><b style="border-color:#0369a1"></b>между гранями колонн (по серединам граней)</span>
+<span><b style="border-color:#a16207"></b>диагонали между ближними рёбрами колонн</span>
+<span><b style="border-color:#7e22ce"></b>засечки от опор ворот A и B до центров лунок</span>
+<span><b style="border-color:#0f766e"></b>привязка осей рядов и рам к кромкам площадки</span>
 <span><b style="border-color:#dc2626;border-top-style:dashed"></b>оси рядов и рам, контур кровли</span>
 <span><b style="border-color:#16a34a;border-top-style:dashed"></b>коридор заезда</span></div></div>
+
+<div class="grid2 c"><div class="card">
+<h3>Контроль колонн по граням (при установке и после бетонирования)</h3>
+<table><thead><tr><th>Размер в свету</th><th class="n">м</th></tr></thead><tbody>{ccrow}</tbody></table>
+<p>Рулетку прикладывать к <b>середине грани</b> (синие точки) или к <b>ребру</b> — углу колонны, ближнему к
+другой колонне (жёлтая точка). Колонна 100×60: сторона 100 — вдоль рамы (параллельно передней кромке), 60 — вдоль
+ряда. Допуск ±10 мм; обе диагонали должны сойтись.</p>
+</div><div class="card">{column_inset()}</div></div>
 
 <div class="grid2"><div class="card">
 <h3>Привязка центров лунок</h3>
@@ -230,7 +292,7 @@ table td.n,table th.n{text-align:right;font-variant-numeric:tabular-nums}
 Ряды лунок параллельны боковым сторонам площадки: левый — 0.40 м наружу, правый — 0.35 м внутрь; передний и задний —
 1.00 м внутрь от передней и задней кромок.</p>
 </div><div class="card">
-<h3>Контроль разбивки</h3>
+<h3>Контроль разбивки центров лунок (до бурения)</h3>
 <table><thead><tr><th>Контрольный размер</th><th class="n">м</th></tr></thead><tbody>{crow}</tbody></table>
 </div></div>
 
