@@ -31,10 +31,13 @@ def dist(p, q):
     return math.hypot(q[0] - p[0], q[1] - p[1])
 
 
-def col_marks():
+SHOW_COL, SHOW_HOLE = 4.0, 1.8         # на плане колонны и лунки увеличены (иначе грань от центра не отличить)
+
+
+def col_marks(show=1.0):
     """Точки на колоннах для контроля по граням: середины обращённых друг к другу граней и ближние рёбра.
     Колонна 100×60: сторона 100 — вдоль рамы (по X), 60 — вдоль ряда (по Y)."""
-    hb, hh = COL_B / 2, COL_H / 2
+    hb, hh = COL_B / 2 * show, COL_H / 2 * show
     m = {}
     for n, (x, y) in HOLES.items():
         sx = 1 if n.startswith("Л") else -1          # внутрь, к другому ряду
@@ -83,8 +86,10 @@ class Plan(Svg):
         k = self.k
         for e, f in ((p, a), (q, b)):
             if abs(off) > 1:
-                self.line(e[0] * 1000, e[1] * 1000, f[0] + nx * 40 * (1 if off > 0 else -1),
-                          f[1] + ny * 40 * (1 if off > 0 else -1), "dl")
+                sg = 1 if off > 0 else -1
+                E, F = self.P(e[0] * 1000, e[1] * 1000), self.P(f[0] + nx * 60 * sg, f[1] + ny * 60 * sg)
+                self.items.append(f'<line x1="{E[0]:.1f}" y1="{E[1]:.1f}" x2="{F[0]:.1f}" y2="{F[1]:.1f}" '
+                                  f'stroke="{color}" stroke-width="{0.7 * self.k:.1f}" stroke-opacity="0.85"/>')
         A_, B_ = self.P(*a), self.P(*b)
         self.items.append(f'<line x1="{A_[0]:.1f}" y1="{A_[1]:.1f}" x2="{B_[0]:.1f}" y2="{B_[1]:.1f}" '
                           f'stroke="{color}" stroke-width="{1.1 * k:.1f}" marker-start="url(#ar)" marker-end="url(#ar)" '
@@ -153,7 +158,7 @@ def plan_svg():
     # размеры
     blue, gold, purple, teal = "#0369a1", "#a16207", "#7e22ce", "#0f766e"
     # между колоннами — по граням (середины обращённых друг к другу граней), диагонали — между ближними рёбрами
-    c, cd = col_marks(), clear_dims()
+    c, cd = col_marks(SHOW_COL), clear_dims()          # точки — по увеличенным колоннам, цифры — фактические
     s.dim(c["Л1"]["side"], c["П1"]["side"], f"{cd['cross1']:.3f}", off=-520, color=blue)
     s.dim(c["Л3"]["side"], c["П3"]["side"], f"{cd['cross3']:.3f}", off=480, color=blue)
     s.dim(c["Л1"]["end"], c["Л3"]["end"], f"{cd['alongL']:.3f}", off=520, color=blue)
@@ -176,12 +181,16 @@ def plan_svg():
     s.dim((0, -0.62), (PLOT_W, -0.62), "площадка 5.40", color="var(--dim)")
     # лунки и колонны
     for n, (x, y) in HOLES.items():
-        h = HOLE / 2
+        h = HOLE / 2 * SHOW_HOLE
         s.mpoly([(x - h, y - h), (x + h, y - h), (x + h, y + h), (x - h, y + h)], "#e5e7eb", "#0369a1", 1, 1.6)
-        s.mpoly([(x - COL_B / 2, y - COL_H / 2), (x + COL_B / 2, y - COL_H / 2), (x + COL_B / 2, y + COL_H / 2),
-                 (x - COL_B / 2, y + COL_H / 2)], "#2563eb", "#111", 1, 0.8)
+        cb, ch = COL_B / 2 * SHOW_COL, COL_H / 2 * SHOW_COL
+        s.mpoly([(x - cb, y - ch), (x + cb, y - ch), (x + cb, y + ch), (x - cb, y + ch)], "#2563eb", "#111", 1, 0.8)
+        for key in ("side", "end", "rib"):
+            q = s.P(*(v * 1000 for v in col_marks(SHOW_COL)[n][key]))
+            s.items.append(f'<circle cx="{q[0]:.1f}" cy="{q[1]:.1f}" r="{3.2 * k:.0f}" '
+                           f'fill="{"#a16207" if key == "rib" else "#0369a1"}" stroke="#fff" stroke-width="{0.8 * k:.0f}"/>')
         left = n.startswith("Л")
-        s.mtext(x + (-0.26 if left else 0.26), y + 0.2, n, "lb", "end" if left else "start", None, 26, True)
+        s.mtext(x + (-0.36 if left else 0.36), y + 0.25, n, "lb", "end" if left else "start", None, 26, True)
     for nm, p in (("A", A), ("B", B)):
         q = s.P(p[0] * 1000, p[1] * 1000)
         s.items.append(f'<circle cx="{q[0]:.1f}" cy="{q[1]:.1f}" r="{4 * k:.0f}" fill="#ca8a04"/>')
@@ -273,7 +282,9 @@ table td.n,table th.n{text-align:right;font-variant-numeric:tabular-nums}
 <span><b style="border-color:#7e22ce"></b>засечки от опор ворот A и B до центров лунок</span>
 <span><b style="border-color:#0f766e"></b>привязка осей рядов и рам к кромкам площадки</span>
 <span><b style="border-color:#dc2626;border-top-style:dashed"></b>оси рядов и рам, контур кровли</span>
-<span><b style="border-color:#16a34a;border-top-style:dashed"></b>коридор заезда</span></div></div>
+<span><b style="border-color:#16a34a;border-top-style:dashed"></b>коридор заезда</span></div>
+<p class="note" style="margin:6px 0 0">Лунки и колонны на плане увеличены (не в масштабе), чтобы были видны грани и рёбра,
+от которых идут размеры: синие точки — середины граней, жёлтые — ближние рёбра.</p></div>
 
 <div class="grid2 c"><div class="card">
 <h3>Контроль колонн по граням (при установке и после бетонирования)</h3>
