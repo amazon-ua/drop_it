@@ -162,6 +162,7 @@ class Scheme:
     side_panel: bool = False         # полоса поликарбоната по правому ряду колонн (ветер на неё)
     sp_top: float = 3.04             # верх полосы (верх колонн), м
     sp_bot: float = 2.07             # низ полосы (низ нижнего пояса боковой фермы), м
+    sp_cant: bool = True             # полоса и за колоннами (на всю длину кровли), иначе — только между колоннами
     skew: float = SKEW               # косина площадки (0 — прямоугольник)
     edge_d: float = 0.25             # 5 ферм: крайние фермы — на столько внутрь от кромок кровли, м
     edge_groups: bool = True         # 5 ферм: у крайних ферм свои (облегчённые) сечения
@@ -521,7 +522,7 @@ def build(sc: Scheme):
     m.pieces = {k: v for k, v in b.piece_meta.items() if k in used}
     m.scheme = sc
     m.rows = rows
-    m.side_panel = dict(top=sc.sp_top, bot=sc.sp_bot, zb=sc.side_zb) if sc.side_panel else None
+    m.side_panel = dict(top=sc.sp_top, bot=sc.sp_bot, zb=sc.side_zb, cant=sc.sp_cant) if sc.side_panel else None
     m.frames_y = frames_y
     return m
 
@@ -669,7 +670,7 @@ def side_panel_case(m):
             Lst = e.L
             out[ei] = np.array([1.25 * ht * L / max(Lst, 1e-3), 0.0, 0.0])
     for yc, els in col_els.items():
-        cant = (-Y_MIN if yc < BAY / 2 else Y_MAX - BAY) - 0.03
+        cant = ((-Y_MIN if yc < BAY / 2 else Y_MAX - BAY) - 0.03) if sp.get("cant", True) else 0.0
         F = 0.375 * ht * L + h * cant
         Ltot = sum(m.elems[ei].L for ei in els)
         for ei in els:
