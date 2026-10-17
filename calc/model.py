@@ -159,6 +159,9 @@ class Scheme:
     embed: float = 1.25              # заделка колонны в бетон, м
     embed_gap: float | None = None   # если задано — колонна на всю глубину лунки, низ на embed_gap выше дна
     hole_rebar: bool = True          # армирование лунок (каркас из арматуры)
+    side_panel: bool = False         # полоса поликарбоната по правому ряду колонн (ветер на неё)
+    sp_top: float = 3.04             # верх полосы (верх колонн), м
+    sp_bot: float = 2.07             # низ полосы (низ нижнего пояса боковой фермы), м
     skew: float = SKEW               # косина площадки (0 — прямоугольник)
     edge_d: float = 0.25             # 5 ферм: крайние фермы — на столько внутрь от кромок кровли, м
     edge_groups: bool = True         # 5 ферм: у крайних ферм свои (облегчённые) сечения
@@ -518,6 +521,7 @@ def build(sc: Scheme):
     m.pieces = {k: v for k, v in b.piece_meta.items() if k in used}
     m.scheme = sc
     m.rows = rows
+    m.side_panel = dict(top=sc.sp_top, bot=sc.sp_bot, zb=sc.side_zb) if sc.side_panel else None
     m.frames_y = frames_y
     return m
 
@@ -560,6 +564,7 @@ class Loads:
     ce: tuple = (0.62, -1.04, -0.88, -0.08)
     cx_member: float = 2.0      # лобовий опір стрижнів прямокутного перерізу
     cf: float = 0.04            # тертя для хвилястого покриття (прим. 2 до схеми 11)
+    cp_panel: float = 1.6       # бокова смуга (окремо розташований щит під навісом): сумарний коеф. тиску
     psi2: float = 0.9           # ψt2, п. 4.18
 
 
@@ -634,7 +639,42 @@ def unit_cases(model, L: Loads):
             Wx[ei] = Wx.get(ei, np.zeros(3)) + fx
     cases["Wx"] = Wx
     cases["Wy"] = Wy
+    cases["Wpanel"] = side_panel_case(m)
     return cases
+
+
+def side_panel_case(m):
+    """Ветер на полосу поликарбоната по правому ряду (1 Па, +x — наружу). Полоса крепится: низ — к нижнему поясу
+    правой боковой фермы, верх — к рейке на колоннах и стойке средней рамы (двухпролётная, пролёты BAY/2),
+    консольные части за колоннами — к колоннам (в запас — вся нагрузка консолей на колонну)."""
+    sp = getattr(m, "side_panel", None)
+    out = {}
+    if not sp:
+        return out
+    h = sp["top"] - sp["bot"]
+    hb = ht = h / 2
+    L = BAY / 2
+    col_els = {}
+    for ei, e in enumerate(m.elems):
+        mm = m.members[e.member]
+        k = mm.get("kind")
+        p1, p2 = mm["p1"], mm["p2"]
+        if abs(p1[0] - SPAN) > 1e-6 or abs(p2[0] - SPAN) > 1e-6:
+            continue
+        if k == "sb":
+            out[ei] = np.array([hb, 0.0, 0.0])
+        elif k == "col" and min(p1[2], p2[2]) >= sp["zb"] - 1e-6 and max(p1[2], p2[2]) <= Z_TIE + 1e-6:
+            col_els.setdefault(mm["y"], []).append(ei)
+        elif k == "stub_low":
+            Lst = e.L
+            out[ei] = np.array([1.25 * ht * L / max(Lst, 1e-3), 0.0, 0.0])
+    for yc, els in col_els.items():
+        cant = (-Y_MIN if yc < BAY / 2 else Y_MAX - BAY) - 0.03
+        F = 0.375 * ht * L + h * cant
+        Ltot = sum(m.elems[ei].L for ei in els)
+        for ei in els:
+            out[ei] = np.array([F / Ltot, 0.0, 0.0])
+    return out
 
 
 def combos(L: Loads):
@@ -661,9 +701,9 @@ def combos(L: Loads):
         # вітер зліва (+x): навітряний лівий схил: зовн. половина c1, внутр. c2;
         # підвітряний правий: внутр. c3, зовн. c4.  Справа — дзеркально.
         if direction == "+x":
-            z = {"W_L_out": c1, "W_L_in": c2, "W_R_in": c3, "W_R_out": c4, "Wx": 1.0}
+            z = {"W_L_out": c1, "W_L_in": c2, "W_R_in": c3, "W_R_out": c4, "Wx": 1.0, "Wpanel": L.cp_panel}
         elif direction == "-x":
-            z = {"W_R_out": c1, "W_R_in": c2, "W_L_in": c3, "W_L_out": c4, "Wx": -1.0}
+            z = {"W_R_out": c1, "W_R_in": c2, "W_L_in": c3, "W_L_out": c4, "Wx": -1.0, "Wpanel": -L.cp_panel}
         elif direction == "+y":
             z = {"Wy": 1.0}
         else:
