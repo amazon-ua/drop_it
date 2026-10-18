@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 
 from fem import Elem, Model
+from sections import reinforced, with_gussets
 
 # ---------------- неизменяемая геометрия ----------------
 SPAN = 5.45
@@ -163,6 +164,12 @@ class Scheme:
     sp_top: float = 3.04             # верх полосы (верх колонн), м
     sp_bot: float = 2.07             # низ полосы (низ нижнего пояса боковой фермы), м
     sp_cant: bool = True             # полоса и за колоннами (на всю длину кровли), иначе — только между колоннами
+    raf_reinf: object = None         # усиление правых стропил рам 1 и 3 снизу (Section обрезка, напр. 80×40×2,5 пл.);
+                                     # участок узла А (до конца фасонок) — стропило с фасонками
+    rr_x0: float = 0.20              # начало усиления от оси колонны по горизонтали (конец фасонок узла А), м
+    rr_x1: float = 1.667             # конец усиления от оси колонны по горизонтали (≈ 60 мм до узла подкоса фермы), м
+    rr_hg: float | None = 0.0685     # фасонки узла А в расчёте: от оси стропила вниз по нормали до верха затяжки у оси
+                                     # колонны (3.100 − 3.030 = 70 мм по вертикали); ниже (до +2.920) — в запас не учтены
     skew: float = SKEW               # косина площадки (0 — прямоугольник)
     edge_d: float = 0.25             # 5 ферм: крайние фермы — на столько внутрь от кромок кровли, м
     edge_groups: bool = True         # 5 ферм: у крайних ферм свои (облегчённые) сечения
@@ -285,11 +292,14 @@ def build(sc: Scheme):
             xs = [-OVH_L] + xs
         if SPAN + OVH_R not in xs:
             xs.append(SPAN + OVH_R)
+        # усиленное правое стропило рам на колоннах: участки без усиления / с усилением / узел А с фасонками
+        rr = [SPAN - sc.rr_x1, SPAN - sc.rr_x0] if sc.raf_reinf is not None and fy in col_y else []
+        xs = sorted(set(xs + rr))
         left = [x for x in xs if x <= X_RIDGE + 1e-9]
         right = [x for x in xs if x >= X_RIDGE - 1e-9]
         # структурные точки стропила (границы проверяемых участков)
         key_l = [-OVH_L, 0.0, X_RIDGE - sc.strut_dx if sc.web == "KS" else None, X_RIDGE]
-        key_r = [X_RIDGE, X_RIDGE + sc.strut_dx if sc.web == "KS" else None, SPAN, SPAN + OVH_R]
+        key_r = [X_RIDGE, X_RIDGE + sc.strut_dx if sc.web == "KS" else None] + rr + [SPAN, SPAN + OVH_R]
         for side, xl, keys in (("L", left, key_l), ("R", right, key_r)):
             keys = [k for k in keys if k is not None]
             piece = b.new_piece(rafter_g, frame=fy, side=side)
@@ -297,8 +307,18 @@ def build(sc: Scheme):
                 seg = [x for x in xl if k1 - 1e-9 <= x <= k2 + 1e-9]
                 pts = [(x, fy, z_rafter(x)) for x in seg]
                 zdir = np.array([-SIN, 0, COS]) if side == "L" else np.array([SIN, 0, COS])
-                b.add_member(pts, rafter_g, zdir, piece=piece, kind="rafter", frame=fy,
-                             overhang=(k1 < 0 or k2 > SPAN), nsub=1)
+                mid_ = b.add_member(pts, rafter_g, zdir, piece=piece, kind="rafter", frame=fy,
+                                    overhang=(k1 < 0 or k2 > SPAN), nsub=1)
+                if side == "R" and rr and k1 >= rr[0] - 1e-9 and k2 <= SPAN + 1e-9:
+                    base_sec = sc.groups[rafter_g]
+                    if k1 >= rr[1] - 1e-9:
+                        sec_ = with_gussets(base_sec, hg=sc.rr_hg)
+                        b.member_meta[mid_]["reinf"] = "gusset"
+                    else:
+                        sec_ = reinforced(base_sec, sc.raf_reinf)
+                        b.member_meta[mid_]["reinf"] = sc.raf_reinf.name
+                    for ei in b.member_meta[mid_]["elems"]:
+                        b.m.elems[ei].sec = sec_
         # --- затяжка
         xt = [0.0, SPAN]
         if sc.web in ("K", "KS"):

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import openpyxl
@@ -194,3 +194,41 @@ def bar_lengths_from_price(source: str):
                 if vals:
                     _BARS[_norm_name(r[1])] = vals
     return _BARS.get(_norm_name(source))
+
+
+def plate_section(b: float, t: float, name: str | None = None) -> Section:
+    """Полоса b × t (b — поперёк стержня, плашмя): характеристики как у сплошного прямоугольника."""
+    A = b * t
+    Iy, Iz = b * t ** 3 / 12, t * b ** 3 / 12
+    return Section(name or f"полоса {b * 1000:g}×{t * 1000:g}", t, b, t, 0.0, "полоса", A=A, Iy=Iy, Iz=Iz,
+                   J=b * t ** 3 / 3, Wy=Iy / (t / 2), Wz=Iz / (b / 2), iy=math.sqrt(Iy / A),
+                   iz=math.sqrt(Iz / A), mass=A * RHO, perim=2 * (b + t))
+
+
+def reinforced(base: Section, add: Section, name: str | None = None) -> Section:
+    """Труба base с приваренным вплотную снизу усилением add (труба или полоса, add.h — по высоте base).
+    Центр тяжести смещается вниз; Wy — по наиболее удалённой фибре (верх base)."""
+    y2 = -(base.h / 2 + add.h / 2)
+    A = base.A + add.A
+    yc = add.A * y2 / A
+    Iy = base.Iy + base.A * yc ** 2 + add.Iy + add.A * (y2 - yc) ** 2
+    Iz = base.Iz + add.Iz
+    cmax = max(base.h / 2 - yc, base.h / 2 + add.h + yc)
+    return replace(base, name=name or f"{base.name}+{add.name}", A=A, Iy=Iy, Iz=Iz, J=base.J + add.J,
+                   Wy=Iy / cmax, Wz=Iz / (max(base.b, add.b) / 2), iy=math.sqrt(Iy / A),
+                   iz=math.sqrt(Iz / A), mass=base.mass + add.mass)
+
+
+def with_gussets(base: Section, tg: float = 0.005, hg: float | None = None, name: str | None = None) -> Section:
+    """Стропило в узле А между двумя фасонками tg. Фасонки — от оси стропила вниз на hg (по нормали к оси);
+    по умолчанию в запас — только нижняя половина стенки (hg = h/2)."""
+    hg = base.h / 2 if hg is None else hg
+    Ag = 2 * tg * hg
+    yg = -hg / 2
+    A = base.A + Ag
+    yc = Ag * yg / A
+    Iy = base.Iy + base.A * yc ** 2 + 2 * tg * hg ** 3 / 12 + Ag * (yg - yc) ** 2
+    Iz = base.Iz + 2 * hg * tg * ((base.b + tg) / 2) ** 2
+    return replace(base, name=name or f"{base.name}+фасонки", A=A, Iy=Iy, Iz=Iz,
+                   Wy=Iy / max(base.h / 2 - yc, hg + yc), Wz=Iz / (base.b / 2 + tg), iy=math.sqrt(Iy / A),
+                   iz=math.sqrt(Iz / A))

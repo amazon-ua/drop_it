@@ -28,6 +28,8 @@ def scheme_from_result(r):
     p = dict(r["params"])
     sc = M.Scheme(name=r["label"], **p)
     sc.groups = {g: sec_by_name(n) for g, n in r["groups"].items()}
+    if isinstance(sc.raf_reinf, str):
+        sc.raf_reinf = sec_by_name(sc.raf_reinf)
     return sc
 
 
