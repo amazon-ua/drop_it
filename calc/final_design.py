@@ -145,7 +145,10 @@ def main():
     from installer_check import installer_check
     inst = installer_check(an_main.model, groups=("lath", "le", "lr", "ge"), margin=0.40)   # к кромкам ближе 0.4 м не подходить
     r.update(total=est["total"], pipes=est["pipes"], mass=q["mass"], frame_part=est["frame_part"],
-             util=out["Ch0.70"], util_ch04=out["Ch0.40"], overrides=dict(OVERRIDES, **EDGE), panel=dict(PANEL, ext_web=EXT_WEB, total_base=est0["total"], raf_no_ew=raf_no_ew),
+             util=out["Ch0.70"], util_ch04=out["Ch0.40"], overrides=dict(OVERRIDES, **EDGE), panel=dict(PANEL, ext_web=EXT_WEB, total_base=est0["total"], raf_no_ew=raf_no_ew,
+                       ew_Nc=round(max(-f["Nmin"] for mid, rr in an_main.member_results.items()
+                                       if an_main.model.members[mid]["group"] == "ew"
+                                       for f in rr["forces"].values()) / 1e3, 2)),
              refined=True,
              label=r["label"] + ", торцевая обвязка на усиленных карнизных и коньковой обрешётинах"
                    + ", полоса поликарбоната справа, раскосы ферм у опор",
