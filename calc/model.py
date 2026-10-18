@@ -168,6 +168,10 @@ class Scheme:
                                      # участок узла А (до конца фасонок) — стропило с фасонками
     rr_x0: float = 0.20              # начало усиления от оси колонны по горизонтали (конец фасонок узла А), м
     rr_x1: float = 1.667             # конец усиления от оси колонны по горизонтали (≈ 60 мм до узла подкоса фермы), м
+    ext_web: tuple = ()              # доп. решётка ферм к опорам (группа "ew"): ("v", dx) — стойка затяжка→стропило;
+                                     # ("d", dx_tie, dx_raf) — раскос; dx — от оси колонны по горизонтали
+    ext_web_frames: str = "col"      # "col" — только рамы на колоннах (1 и 3), "all" — все рамы
+    ext_web_sides: str = "R"         # "R" — правая сторона, "LR" — обе (зеркально)
     rr_hg: float | None = 0.0685     # фасонки узла А в расчёте: от оси стропила вниз по нормали до верха затяжки у оси
                                      # колонны (3.100 − 3.030 = 70 мм по вертикали); ниже (до +2.920) — в запас не учтены
     skew: float = SKEW               # косина площадки (0 — прямоугольник)
@@ -198,6 +202,7 @@ GROUP_INFO = {
     "tie": ("Затяжки", "main"),
     "kp": ("Подвеска (стойка у конька)", "web"),
     "strut": ("Подкосы фермы", "web"),
+    "ew": ("Доп. решётка ферм у опор", "web"),
     "knee": ("Подкосы колонна→затяжка", "web"),
     "lath": ("Обрешётка", "beam"),
     "ge": ("Торцевая обвязка обрешётки", "beam"),
@@ -294,12 +299,25 @@ def build(sc: Scheme):
             xs.append(SPAN + OVH_R)
         # усиленное правое стропило рам на колоннах: участки без усиления / с усилением / узел А с фасонками
         rr = [SPAN - sc.rr_x1, SPAN - sc.rr_x0] if sc.raf_reinf is not None and fy in col_y else []
-        xs = sorted(set(xs + rr))
+        # доп. решётка: точки на стропиле и затяжке (x от левой колонны)
+        ew_on = bool(sc.ext_web) and (sc.ext_web_frames == "all" or fy in col_y)
+        ew_r, ew_l, ew_t = [], [], []
+        if ew_on:
+            for it in sc.ext_web:
+                dxt, dxr = (it[1], it[1]) if it[0] == "v" else (it[1], it[2])
+                ew_r.append(SPAN - dxr)
+                ew_t.append(SPAN - dxt)
+                if "L" in sc.ext_web_sides:
+                    ew_l.append(dxr)
+                    ew_t.append(dxt)
+        xs = sorted(set(xs + rr + ew_r + ew_l))
         left = [x for x in xs if x <= X_RIDGE + 1e-9]
         right = [x for x in xs if x >= X_RIDGE - 1e-9]
         # структурные точки стропила (границы проверяемых участков)
-        key_l = [-OVH_L, 0.0, X_RIDGE - sc.strut_dx if sc.web == "KS" else None, X_RIDGE]
-        key_r = [X_RIDGE, X_RIDGE + sc.strut_dx if sc.web == "KS" else None] + rr + [SPAN, SPAN + OVH_R]
+        key_l = [-OVH_L, 0.0] + sorted(set(ew_l) - {X_RIDGE - sc.strut_dx}) + \
+            [X_RIDGE - sc.strut_dx if sc.web == "KS" else None, X_RIDGE]
+        key_r = [X_RIDGE, X_RIDGE + sc.strut_dx if sc.web == "KS" else None] + \
+            sorted(set(rr + ew_r) - {X_RIDGE + sc.strut_dx}) + [SPAN, SPAN + OVH_R]
         for side, xl, keys in (("L", left, key_l), ("R", right, key_r)):
             keys = [k for k in keys if k is not None]
             piece = b.new_piece(rafter_g, frame=fy, side=side)
@@ -325,7 +343,7 @@ def build(sc: Scheme):
             xt.append(X_RIDGE)
         if sc.knee_t:
             xt += [sc.knee_dx, SPAN - sc.knee_dx]
-        xt = sorted(set(xt))
+        xt = sorted(set(xt + ew_t))
         tie_piece = b.new_piece("tie" + sfx, frame=fy)
         for x1, x2 in zip(xt[:-1], xt[1:]):
             b.add_member([(x1, fy, Z_TIE), (x2, fy, Z_TIE)], "tie" + sfx, (0, 0, 1), piece=tie_piece,
@@ -347,6 +365,13 @@ def build(sc: Scheme):
             for xs_ in (X_RIDGE - sc.strut_dx, X_RIDGE + sc.strut_dx):
                 b.add_member([(X_RIDGE, fy, Z_TIE), (xs_, fy, z_rafter(xs_))], "strut" + sfx, (0, 1, 0),
                              nsub=2, kind="strut", frame=fy)
+        if ew_on:
+            for side in sc.ext_web_sides:
+                for it in sc.ext_web:
+                    dxt, dxr = (it[1], it[1]) if it[0] == "v" else (it[1], it[2])
+                    xt_, xr_ = (SPAN - dxt, SPAN - dxr) if side == "R" else (dxt, dxr)
+                    b.add_member([(xt_, fy, Z_TIE), (xr_, fy, z_rafter(xr_))], "ew", (0, 1, 0),
+                                 nsub=2, kind="strut", frame=fy, ext=it[0])
         # --- поперечные подкосы колонна→затяжка (только у рам на колоннах)
         if sc.knee_t and not mid_frame:
             b.add_member([(0.0, fy, sc.knee_z), (sc.knee_dx, fy, Z_TIE)], "knee", (0, 1, 0),
