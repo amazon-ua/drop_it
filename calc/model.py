@@ -371,6 +371,7 @@ def build(sc: Scheme):
                     dxt, dxr = (it[1], it[1]) if it[0] == "v" else (it[1], it[2])
                     xt_, xr_ = (SPAN - dxt, SPAN - dxr) if side == "R" else (dxt, dxr)
                     b.add_member([(xt_, fy, Z_TIE), (xr_, fy, z_rafter(xr_))], "ew", (0, 1, 0),
+                                 piece=b.new_piece("ew", frame=fy, dx_tie=dxt, dx_raf=dxr),
                                  nsub=2, kind="strut", frame=fy, ext=it[0])
         # --- поперечные подкосы колонна→затяжка (только у рам на колоннах)
         if sc.knee_t and not mid_frame:
@@ -610,7 +611,8 @@ class Loads:
     ce: tuple = (0.62, -1.04, -0.88, -0.08)
     cx_member: float = 2.0      # лобовий опір стрижнів прямокутного перерізу
     cf: float = 0.04            # тертя для хвилястого покриття (прим. 2 до схеми 11)
-    cp_panel: float = 1.6       # бокова смуга (окремо розташований щит під навісом): сумарний коеф. тиску
+    cp_panel: float = 1.8       # бокова смуга (окремо розташований щит під навісом): сумарний коеф. тиску
+                                # (як для піднятого щита, EN 1991-1-4 п. 7.4.3; у запас проти 1.6)
     psi2: float = 0.9           # ψt2, п. 4.18
 
 
@@ -691,8 +693,9 @@ def unit_cases(model, L: Loads):
 
 def side_panel_case(m):
     """Ветер на полосу поликарбоната по правому ряду (1 Па, +x — наружу). Полоса крепится: низ — к нижнему поясу
-    правой боковой фермы, верх — к рейке на колоннах и стойке средней рамы (двухпролётная, пролёты BAY/2),
-    консольные части за колоннами — к колоннам (в запас — вся нагрузка консолей на колонну)."""
+    правой боковой фермы, верх — к рейкам на колоннах и стойке средней рамы (стойка на 20 мм глубже плоскости листа,
+    поэтому рейка разрезная: два пролёта BAY/2, торцы приварены к фасонкам узлов А и Б), консольные части за
+    колоннами — к колоннам (в запас — вся нагрузка консолей на колонну)."""
     sp = getattr(m, "side_panel", None)
     out = {}
     if not sp:
@@ -713,10 +716,10 @@ def side_panel_case(m):
             col_els.setdefault(mm["y"], []).append(ei)
         elif k == "stub_low":
             Lst = e.L
-            out[ei] = np.array([1.25 * ht * L / max(Lst, 1e-3), 0.0, 0.0])
+            out[ei] = np.array([1.0 * ht * L / max(Lst, 1e-3), 0.0, 0.0])
     for yc, els in col_els.items():
         cant = ((-Y_MIN if yc < BAY / 2 else Y_MAX - BAY) - 0.03) if sp.get("cant", True) else 0.0
-        F = 0.375 * ht * L + h * cant
+        F = 0.5 * ht * L + h * cant
         Ltot = sum(m.elems[ei].L for ei in els)
         for ei in els:
             out[ei] = np.array([F / Ltot, 0.0, 0.0])

@@ -29,6 +29,11 @@ OVERRIDES = {"col": "100×60×4", "stub": "60×60×3", "sb": "60×60×2"}
 # торцевая обвязка под обрешёткой в 0.175 м от передней и задней кромки, без подкосов; карнизные (le) и
 # коньковая (lr) обрешётины — усиленные (проверка на сосредоточенную нагрузку монтажника, ДБН В.1.2-2 п. 6.10)
 EDGE = {"ge": "50×30×2", "le": "50×30×2", "lr": "60×60×2"}
+# полоса поликарбоната по правому ряду колонн (DECISIONS, п. 7i): ветер на полосу перегружал правые стропила (1.10);
+# вместо усиления стропил — продление решётки ферм к опорам: раскос □20×20×2 от узла подкоса на стропиле (1.725 м от
+# оси колонны) вниз к затяжке (0.85 м от оси колонны), во всех рамах и на обоих скатах (одинаковый вид)
+EXT_WEB = (("d", 0.85, 1.725),)
+PANEL = {"ew": "20×20×2"}
 
 
 def node_forces(an, sc):
@@ -102,12 +107,15 @@ def main():
     groups = dict(r["groups"])
     groups.update(OVERRIDES)
     groups.update(EDGE)
+    groups.update(PANEL)
     r["groups"] = groups
     secs = {g: sec_by_name(n) for g, n in groups.items()}
     tg = M.shop_truss_geom(secs["col"].b, secs["sb"].h, secs["sd"].h)
     r["params"] = dict(r["params"], apex_z=round(tg["apex_z"], 4), gable_edge=True, ge_d=0.175, ge_knee=False,
                        embed_gap=0.10, hole_rebar=False,
-                       eave_row_group="le", ridge_row_group="lr")
+                       eave_row_group="le", ridge_row_group="lr",
+                       # полоса поликарбоната по правому ряду колонн (ветер на неё, cp 1.8) и раскосы ферм у опор
+                       side_panel=True, ext_web=EXT_WEB, ext_web_frames="all", ext_web_sides="LR")
     sc = scheme_from_result(r)
     base = baseline_scheme()
     an_b = C.Analysis(base, M.Loads()).run_all()
@@ -124,11 +132,23 @@ def main():
     q = K.quantities(an_main.model, sc)
     from report_data import fab_details, offcut_free
     est = K.estimate(q, cal, free=offcut_free(fab_details(an_main.model, sc)[0]))   # минус обрезки заказчика
+    # то же без полосы и раскосов у опор — для сравнения со схемами перебора (они считались без полосы)
+    sc0 = sc.copy(side_panel=False, ext_web=())
+    sc0.groups.pop("ew", None)
+    m0 = C.Analysis(sc0, M.Loads(Ch=0.70), do_buckling=False).model     # Solver задаёт длины элементов
+    est0 = K.estimate(K.quantities(m0, sc0), cal, free=offcut_free(fab_details(m0, sc0)[0]))
+    # с полосой, но без раскосов у опор — что было бы без доработки
+    sc1 = sc.copy(ext_web=())
+    sc1.groups.pop("ew", None)
+    gu1 = C.Analysis(sc1, M.Loads(Ch=0.70)).run_all().group_util()
+    raf_no_ew = round(float(gu1["raf"][0]), 3)
     from installer_check import installer_check
     inst = installer_check(an_main.model, groups=("lath", "le", "lr", "ge"), margin=0.40)   # к кромкам ближе 0.4 м не подходить
     r.update(total=est["total"], pipes=est["pipes"], mass=q["mass"], frame_part=est["frame_part"],
-             util=out["Ch0.70"], util_ch04=out["Ch0.40"], overrides=dict(OVERRIDES, **EDGE), refined=True,
-             label=r["label"] + ", торцевая обвязка на усиленных карнизных и коньковой обрешётинах",
+             util=out["Ch0.70"], util_ch04=out["Ch0.40"], overrides=dict(OVERRIDES, **EDGE), panel=dict(PANEL, ext_web=EXT_WEB, total_base=est0["total"], raf_no_ew=raf_no_ew),
+             refined=True,
+             label=r["label"] + ", торцевая обвязка на усиленных карнизных и коньковой обрешётинах"
+                   + ", полоса поликарбоната справа, раскосы ферм у опор",
              installer={str(k): round(v[0], 3) for k, v in inst.items()})
     (OUT / "final_design.json").write_text(json.dumps(r, ensure_ascii=False, indent=1))
     nf = node_forces(an_main, sc)

@@ -26,7 +26,7 @@ SEAM = "#3b0764"   # сварные швы — тёмно-фиолетовые
 
 # цвета элементов (как на общем чертеже)
 COL = {"col": "#2563eb", "raf": "#0f766e", "tie": "#b45309", "sd": "#dc2626", "sb": "#0891b2",
-       "plate": "#6b7280", "lath": "#db2777", "stub": "#2563eb", "kp": "#7c3aed", "ge": "#ea580c", "gk": "#65a30d"}
+       "plate": "#6b7280", "lath": "#db2777", "stub": "#2563eb", "kp": "#7c3aed", "ew": "#7c3aed", "ge": "#ea580c", "gk": "#65a30d"}
 
 NODE_CSS = CSS + """
 svg.nd{width:100%;height:auto;display:block;background:var(--card)}
@@ -1020,7 +1020,7 @@ def minimap(model, marks, primary, label):
     o.append('<polygon points="' + " ".join(f"{P(p)[0]:.1f},{P(p)[1]:.1f}" for p in cp)
              + '" fill="none" stroke="#16a34a" stroke-width="1" stroke-dasharray="5 4"/>')
     # стержни (обрешётка — тонко и бледно)
-    order = {"lath": 0, "sb": 1, "sd": 1, "tie": 2, "kp": 2, "strut": 2, "raf": 3, "stub": 4, "col": 4}
+    order = {"lath": 0, "sb": 1, "sd": 1, "tie": 2, "kp": 2, "strut": 2, "ew": 2, "raf": 3, "stub": 4, "col": 4}
     els = sorted(model.elems, key=lambda e: order.get(model.members[e.member]["group"], 2))
     for e in els:
         g = model.members[e.member]["group"]
@@ -1293,6 +1293,11 @@ def build(final, nf):
 ±{(wp - 60) / 2:.0f} мм поперёк — рама ставится по разметке без подгонки. Выверить, обварить шов <span class="wk">4</span>.</li>
 <li>Торцевая обвязка у переднего и заднего свеса на подпорках, затем обрешётка (узел Г); подпорки убрать.</li>
 <li>Кровля.</li>
+<li><b>Раскосы ферм у опор □20×20×2 — 6 шт.</b> (добавлены, когда каркас уже стоял: нужны из-за полосы поликарбоната
+по правому ряду). В каждой половине каждой рамы — от узла подкоса фермы на стропиле вниз к затяжке в 0.85 м от оси
+колонны (у рамы 2 — от оси стойки-вставки); варятся на стоящем каркасе, шов <span class="wk">15</span>. Чертёж,
+размеры и порядок — в документе «Полоса поликарбоната» (<code>polosa.pdf</code>).</li>
+<li>Полоса поликарбоната по правому ряду колонн — по документу <code>polosa.pdf</code>.</li>
 </ol></div>
 
 <h2 class="pb">Узел А — оголовок колонны (стропило + затяжка + колонна)</h2>

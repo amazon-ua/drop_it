@@ -178,6 +178,8 @@ def metal_cost(q, free=None):
         d["groups"].add(p["group"])
         d["sec"] = s
     for sn, L in (free or []):
+        if sn not in by_sec:              # сечение уже целиком из обрезков
+            continue
         d = by_sec[sn]
         L = min(L, d["L"])
         d["L"] -= L

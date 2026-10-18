@@ -174,6 +174,16 @@ def fab_details(model, sc, lath_split=False, offcuts=True):
             Lc = _m.hypot(dx, dz) - (tie.h / 2) / _m.sin(beta) - (raf.h / 2) / _m.sin(gam)
             add("Подкос фермы", grp, sec, Lc, 1,
                 f"низ — под {_m.degrees(beta):.0f}° к оси (на затяжку у подвески), верх — под {_m.degrees(gam):.0f}° (на стропило)")
+        elif grp == "ew":
+            dxt, dxr = meta["dx_tie"], meta["dx_raf"]
+            run = dxr - dxt
+            dz = M.z_rafter(M.SPAN - dxr) - M.Z_TIE
+            beta = _m.atan2(dz, run)                                 # к горизонту
+            gam = beta - M.SLOPE                                     # к стропилу (раскос идёт к колонне, вниз)
+            Lc = _m.hypot(run, dz) - (tie.h / 2) / _m.sin(beta) - (raf.h / 2) / _m.sin(gam)
+            add("Раскос фермы у опоры", grp, sec, Lc, 1,
+                f"низ — под {_m.degrees(beta):.0f}° к оси (на затяжку в {dxt:.2f} м от оси колонны), верх — под "
+                f"{_m.degrees(gam):.0f}° (на стропило в узле подкоса)")
         elif grp == "sd":
             tg = M.shop_truss_geom(col.b, g["sb"].h, sec.h)
             add("Раскос боковой фермы", grp, sec, tg["L_cut"], 1,

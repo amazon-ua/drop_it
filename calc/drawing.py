@@ -10,7 +10,7 @@ import model as M
 import costs as K
 
 COLORS = {
-    "col": "#2563eb", "raf": "#0f766e", "tie": "#b45309", "kp": "#7c3aed", "strut": "#7c3aed",
+    "col": "#2563eb", "raf": "#0f766e", "tie": "#b45309", "kp": "#7c3aed", "strut": "#7c3aed", "ew": "#7c3aed",
     "knee": "#16a34a", "lath": "#db2777", "sd": "#dc2626", "sb": "#0891b2", "st": "#0891b2",
     "stub": "#2563eb", "eave": "#0891b2", "kl": "#16a34a", "xb": "#ca8a04",
     "ge": "#ea580c", "gk": "#65a30d", "gd": "#ca8a04", "le": "#be185d", "lr": "#9d174d",
@@ -48,7 +48,7 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
                 continue
             a, b = (p1[1], p1[2]), (p2[1], p2[2])
         else:
-            if g in ("col", "knee", "sd", "sb", "kl", "stub", "kp", "strut", "tie", "gk"):
+            if g in ("col", "knee", "sd", "sb", "kl", "stub", "kp", "strut", "ew", "tie", "gk"):
                 continue
             a, b = (p1[0], p1[1]), (p2[0], p2[1])
         segs.append((a, b, g, e.sec))
@@ -136,7 +136,7 @@ def _svg_view(model, sc, view, W=900, H=420, pad=50):
         for fy, nm in zip(model.frames_y, ("рама 1", "рама 2", "рама 3")):
             lab = PP(xr, fy, M.z_rafter(xr) + dz_roof)
             out.append(f'<text x="{lab[0]:.1f}" y="{lab[1]-8:.1f}" class="lev" text-anchor="middle">{nm}</text>')
-    order = ["lath", "le", "lr", "xb", "gd", "sb", "st", "eave", "tie", "kp", "strut", "knee", "sd", "kl", "gk", "ge", "raf",
+    order = ["lath", "le", "lr", "xb", "gd", "sb", "st", "eave", "tie", "kp", "strut", "ew", "knee", "sd", "kl", "gk", "ge", "raf",
              "stub", "col"]
     segs.sort(key=lambda t: order.index(t[2]) if t[2] in order else 0)
     for a, b, g, sec in segs:
